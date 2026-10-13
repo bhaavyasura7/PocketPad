@@ -60,7 +60,7 @@ If your firewall asks, allow incoming connections (UDP port 47770).
 |---|---|---|
 | **Windows** | a real Xbox 360 controller, rumble included | Install [ViGEmBus](https://github.com/nefarius/ViGEmBus/releases) and put `ViGEmClient.dll` (x64) next to `pocketpad.exe` once |
 | **macOS 15 and older** | a real HID gamepad | Start it with `sudo ./pocketpad serve` |
-| **macOS 26** | keyboard & mouse control | The receiver asks for **Accessibility** the first time: System Settings → Privacy & Security → Accessibility → enable **Terminal**. One toggle, once |
+| **macOS 26** | keyboard & mouse control | The receiver asks for **Accessibility** the first time: enable **PocketPad** (the app) or **Terminal** (for `serve`). One toggle, once |
 | **Linux** | diagnostics only (no virtual gamepad yet) | `./pocketpad serve -backend mock` |
 
 ## 2. Install the phone app
@@ -147,7 +147,7 @@ vibrator). Toggle it under Settings in the app.
 |---|---|
 | "No answer from the computer" | Check the address and the pairing code; both devices must be on the same Wi-Fi; allow UDP 47770 through the firewall; get a fresh code with `./pocketpad pair` |
 | "Another phone is already connected" | One phone per receiver; disconnect the other phone first |
-| macOS: nothing moves the cursor | Grant Accessibility to **Terminal** (System Settings → Privacy & Security → Accessibility) and restart the receiver |
+| macOS: nothing moves the cursor | Grant Accessibility to the app running the receiver (**PocketPad**, or **Terminal** for `serve`), then quit and reopen it once if input does not start within a few seconds |
 | macOS: "macOS refused to create the virtual HID device" | Expected on macOS 26 without Apple's entitlement — plain `./pocketpad serve` falls back to keyboard/mouse automatically; only `-backend machid` shows this error |
 | "This phone does not support Bluetooth controller mode" | Your phone's firmware has no HID Device profile (common); use Wi-Fi mode |
 | Choppy input / high RTT | Use a 5 GHz Wi-Fi band and stay close to the router |
