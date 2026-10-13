@@ -2,6 +2,7 @@ package gamepad
 
 import (
 	"fmt"
+	"math"
 	"strings"
 	"sync"
 
@@ -61,6 +62,10 @@ type MacKeyProfile struct {
 	// Right stick: pointer movement, or four keys when RightStickMouse is false.
 	RightStickMouse               bool
 	RSUp, RSDown, RSLeft, RSRight int
+
+	// When set, d-pad up/down turn the mouse wheel (map zoom, weapon
+	// switching) instead of pressing DPadUp/Down.
+	DPadScroll bool
 
 	// Triggers: a key when >= 0, otherwise a mouse button: LT left click and
 	// RT right click, or the reverse when SwapTriggerClicks is set.
@@ -140,6 +145,8 @@ func init() {
 		LTKey: keyNone, RTKey: keyNone,
 		// Like a controller: LT aims (right click), RT fires (left click).
 		SwapTriggerClicks: true,
+		// D-pad up/down zoom the map and switch weapons.
+		DPadScroll: true,
 	}
 
 	for _, p := range []MacKeyProfile{general, racing, gta} {
@@ -185,10 +192,10 @@ func desiredKeys(s protocol.ControllerState, p MacKeyProfile) map[int]bool {
 			add(m.key)
 		}
 	}
-	if s.DPad.Up() {
+	if s.DPad.Up() && !p.DPadScroll {
 		add(p.DPadUp)
 	}
-	if s.DPad.Down() {
+	if s.DPad.Down() && !p.DPadScroll {
 		add(p.DPadDown)
 	}
 	if s.DPad.Left() {
@@ -250,9 +257,19 @@ func macButtonMap(p MacKeyProfile) []buttonKey {
 }
 
 // mouseDelta converts the right stick into pointer movement in pixels for one
-// update tick. Protocol +Y is up; screen +Y is down, so the Y axis flips.
+// update tick. A curved response keeps small deflections slow for precise
+// aiming and map pointing while a full push still moves fast (the curve is
+// 0.35 linear + 0.65 quadratic in the stick magnitude). Protocol +Y is up;
+// screen +Y is down, so the Y axis flips.
 func mouseDelta(rx, ry, dtSeconds, speedPxPerSecond float32) (float64, float64) {
-	dx := float64(rx) * float64(speedPxPerSecond) * float64(dtSeconds)
-	dy := -float64(ry) * float64(speedPxPerSecond) * float64(dtSeconds)
-	return dx, dy
+	mag := math.Sqrt(float64(rx)*float64(rx) + float64(ry)*float64(ry))
+	if mag == 0 {
+		return 0, 0
+	}
+	if mag > 1 {
+		mag = 1
+	}
+	shaped := mag * (0.35 + 0.65*mag)
+	scale := float64(speedPxPerSecond) * float64(dtSeconds) * shaped / mag
+	return float64(rx) * scale, -float64(ry) * scale
 }
