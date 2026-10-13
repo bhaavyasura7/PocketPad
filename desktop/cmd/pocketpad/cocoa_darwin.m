@@ -15,6 +15,16 @@ extern char *ppGoCurrentProfileName(void);
 
 // --- palette ---------------------------------------------------------------
 
+/** Top-down coordinate content view for scroll documents. */
+@interface PPFlippedView : NSView
+@end
+
+@implementation PPFlippedView
+- (BOOL)isFlipped {
+	return YES;
+}
+@end
+
 static NSColor *PPBackground(void) { return [NSColor colorWithSRGBRed:0.043 green:0.051 blue:0.071 alpha:1.0]; }
 static NSColor *PPElevated(void) { return [NSColor colorWithSRGBRed:0.075 green:0.086 blue:0.118 alpha:1.0]; }
 static NSColor *PPChip(void) { return [NSColor colorWithSRGBRed:0.11 green:0.125 blue:0.17 alpha:1.0]; }
@@ -48,7 +58,6 @@ static NSTextField *PPLabel(NSRect frame, NSString *text, CGFloat size, NSColor 
 
 static NSWindow *gWindow = nil;
 static NSTextField *gStatus = nil;
-static NSView *gPillDot = nil;
 static NSTextField *gPillText = nil;
 static NSString *gCodeString = nil;
 
@@ -154,9 +163,9 @@ void pp_app_set_status(const char *text) {
 		if (gStatus != nil) {
 			gStatus.stringValue = value;
 		}
-		if (gPillDot != nil && gPillText != nil) {
+		if (gPillText != nil) {
 			NSColor *color = [NSColor systemOrangeColor];
-			NSString *summary = @"Waiting for phone";
+			NSString *summary = @"Waiting";
 			if ([value hasPrefix:@"●"]) {
 				color = [NSColor systemGreenColor];
 				summary = @"Connected";
@@ -164,8 +173,11 @@ void pp_app_set_status(const char *text) {
 				color = [NSColor systemOrangeColor];
 				summary = @"Permission needed";
 			}
-			gPillDot.layer.backgroundColor = color.CGColor;
-			gPillText.stringValue = summary;
+			NSMutableAttributedString *line = [[NSMutableAttributedString alloc] initWithString:[NSString stringWithFormat:@"● %@", summary]];
+			[line addAttribute:NSForegroundColorAttributeName value:color range:NSMakeRange(0, 1)];
+			[line addAttribute:NSForegroundColorAttributeName value:[NSColor labelColor] range:NSMakeRange(1, line.length - 1)];
+			[line addAttribute:NSFontAttributeName value:[NSFont systemFontOfSize:12] range:NSMakeRange(0, line.length)];
+			gPillText.attributedStringValue = line;
 		}
 	});
 }
@@ -182,8 +194,8 @@ void pp_app_launch(const char *title, const char *code, const char *address,
 		[app setDelegate:gDelegate];
 		gCodeString = [NSString stringWithUTF8String:code];
 
-		CGFloat W = 480;
-		CGFloat H = 680;
+		CGFloat W = 540;
+		CGFloat H = 740;
 		CGFloat (^topY)(CGFloat, CGFloat) = ^CGFloat(CGFloat top, CGFloat h) { return H - top - h; };
 
 		NSWindowStyleMask style = NSWindowStyleMaskTitled | NSWindowStyleMaskClosable | NSWindowStyleMaskMiniaturizable;
@@ -198,7 +210,7 @@ void pp_app_launch(const char *title, const char *code, const char *address,
 
 		// Header: logo, wordmark, live status pill.
 		if (logo != NULL && logoLen > 0) {
-			NSImageView *logoView = [[NSImageView alloc] initWithFrame:NSMakeRect(24, topY(26, 42), 42, 42)];
+			NSImageView *logoView = [[NSImageView alloc] initWithFrame:NSMakeRect(28, topY(26, 44), 44, 44)];
 			logoView.image = [[NSImage alloc] initWithData:[NSData dataWithBytes:logo length:logoLen]];
 			logoView.imageScaling = NSImageScaleProportionallyUpOrDown;
 			logoView.wantsLayer = YES;
@@ -207,27 +219,27 @@ void pp_app_launch(const char *title, const char *code, const char *address,
 			[content addSubview:logoView];
 		}
 		NSTextField *wordmark = [NSTextField labelWithString:@"PocketPad"];
-		wordmark.font = [NSFont boldSystemFontOfSize:20];
-		wordmark.frame = NSMakeRect(78, topY(36, 26), 200, 26);
+		wordmark.font = [NSFont boldSystemFontOfSize:21];
+		wordmark.frame = NSMakeRect(86, topY(37, 26), 220, 26);
 		[content addSubview:wordmark];
 
-		NSView *pill = PPCard(NSMakeRect(W - 24 - 168, topY(32, 28), 168, 28), PPChip(), 14);
+		NSView *pill = PPCard(NSMakeRect(W - 28 - 240, topY(30, 32), 240, 32), PPChip(), 16);
 		[content addSubview:pill];
-		gPillDot = PPCard(NSMakeRect(12, 9, 10, 10), [NSColor systemOrangeColor], 5);
-		[pill addSubview:gPillDot];
-		gPillText = PPLabel(NSMakeRect(30, 6, 128, 16), @"Starting…", 12, [NSColor labelColor]);
+		gPillText = PPLabel(NSMakeRect(0, 8, 240, 16), @"◌ Starting…", 12, [NSColor labelColor]);
+		gPillText.alignment = NSTextAlignmentCenter;
 		[pill addSubview:gPillText];
 
-		NSView *divider = [[NSView alloc] initWithFrame:NSMakeRect(0, topY(82, 1), W, 1)];
+		NSView *divider = [[NSView alloc] initWithFrame:NSMakeRect(0, topY(90, 1), W, 1)];
 		divider.wantsLayer = YES;
 		divider.layer.backgroundColor = [[NSColor colorWithWhite:1 alpha:0.07] CGColor];
 		[content addSubview:divider];
 
 		// Pairing card: QR with a glow, caption, code chip with Copy, address.
-		NSView *hero = PPCard(NSMakeRect(24, topY(100, 372), W - 48, 372), PPElevated(), 16);
+		NSView *hero = PPCard(NSMakeRect(28, topY(112, 400), W - 56, 400), PPElevated(), 16);
 		[content addSubview:hero];
 
-		NSView *qrCard = [[NSView alloc] initWithFrame:NSMakeRect((hero.frame.size.width - 240) / 2, 372 - 24 - 240, 240, 240)];
+		CGFloat heroW = W - 56;
+		NSView *qrCard = [[NSView alloc] initWithFrame:NSMakeRect((heroW - 250) / 2, 400 - 24 - 250, 250, 250)];
 		qrCard.wantsLayer = YES;
 		qrCard.layer.backgroundColor = [[NSColor whiteColor] CGColor];
 		qrCard.layer.cornerRadius = 14;
@@ -237,29 +249,29 @@ void pp_app_launch(const char *title, const char *code, const char *address,
 		qrCard.layer.shadowOffset = CGSizeMake(0, -2);
 		[hero addSubview:qrCard];
 
-		NSImageView *qr = [[NSImageView alloc] initWithFrame:NSMakeRect(12, 12, 216, 216)];
+		NSImageView *qr = [[NSImageView alloc] initWithFrame:NSMakeRect(13, 13, 224, 224)];
 		qr.image = [[NSImage alloc] initWithData:[NSData dataWithBytes:png length:pngLen]];
 		qr.imageScaling = NSImageScaleProportionallyUpOrDown;
 		[qrCard addSubview:qr];
 
 		NSTextField *scanHelp = PPCaption(NSZeroRect, @"SCAN WITH THE POCKETPAD APP, OR TYPE THE CODE");
 		scanHelp.alignment = NSTextAlignmentCenter;
-		scanHelp.frame = NSMakeRect(0, 372 - 24 - 240 - 24 - 14, hero.frame.size.width, 14);
+		scanHelp.frame = NSMakeRect(0, 400 - 292 - 14, heroW, 14);
 		[hero addSubview:scanHelp];
 
-		NSView *codeChip = PPCard(NSMakeRect(28, 372 - 24 - 240 - 24 - 14 - 10 - 40, hero.frame.size.width - 56, 40), PPChip(), 10);
+		NSView *codeChip = PPCard(NSMakeRect(42, 400 - 316 - 44, heroW - 84, 44), PPChip(), 10);
 		[hero addSubview:codeChip];
 		NSTextField *codeField = [NSTextField labelWithString:gCodeString];
-		codeField.font = [NSFont monospacedSystemFontOfSize:14 weight:NSFontWeightSemibold];
+		codeField.font = [NSFont monospacedSystemFontOfSize:15 weight:NSFontWeightSemibold];
 		codeField.textColor = PPAccent();
 		codeField.alignment = NSTextAlignmentCenter;
 		codeField.selectable = YES;
-		codeField.frame = NSMakeRect(6, 10, codeChip.frame.size.width - 92, 20);
+		codeField.frame = NSMakeRect(12, 13, codeChip.frame.size.width - 108, 18);
 		[codeChip addSubview:codeField];
 		NSButton *copy = [NSButton buttonWithTitle:@"Copy" target:gDelegate action:@selector(copyCode:)];
 		copy.bezelStyle = NSBezelStyleRounded;
 		copy.controlSize = NSControlSizeSmall;
-		copy.frame = NSMakeRect(codeChip.frame.size.width - 80, 6, 74, 28);
+		copy.frame = NSMakeRect(codeChip.frame.size.width - 88, 8, 78, 28);
 		[codeChip addSubview:copy];
 
 		NSTextField *addrField = [NSTextField labelWithString:[NSString stringWithUTF8String:address]];
@@ -267,21 +279,21 @@ void pp_app_launch(const char *title, const char *code, const char *address,
 		addrField.textColor = [NSColor secondaryLabelColor];
 		addrField.alignment = NSTextAlignmentCenter;
 		addrField.selectable = YES;
-		addrField.frame = NSMakeRect(0, 12, hero.frame.size.width, 16);
+		addrField.frame = NSMakeRect(0, 16, heroW, 16);
 		[hero addSubview:addrField];
 
 		// Live status card.
-		NSView *statusCard = PPCard(NSMakeRect(24, topY(488, 96), W - 48, 96), PPElevated(), 16);
+		NSView *statusCard = PPCard(NSMakeRect(28, topY(528, 100), W - 56, 100), PPElevated(), 16);
 		[content addSubview:statusCard];
 		NSTextField *statusCap = PPCaption(NSZeroRect, @"LIVE STATUS");
-		statusCap.frame = NSMakeRect(18, 96 - 14 - 16, 200, 14);
+		statusCap.frame = NSMakeRect(18, 100 - 14 - 16, 200, 14);
 		[statusCard addSubview:statusCap];
 		gStatus = [NSTextField labelWithString:@"Starting…"];
 		gStatus.font = [NSFont systemFontOfSize:11];
 		gStatus.textColor = [NSColor secondaryLabelColor];
 		gStatus.maximumNumberOfLines = 3;
 		gStatus.lineBreakMode = NSLineBreakByWordWrapping;
-		gStatus.frame = NSMakeRect(18, 12, W - 48 - 36, 52);
+		gStatus.frame = NSMakeRect(18, 12, W - 56 - 36, 56);
 		[statusCard addSubview:gStatus];
 
 		// Bottom bar.
@@ -289,7 +301,7 @@ void pp_app_launch(const char *title, const char *code, const char *address,
 		mappings.bezelStyle = NSBezelStyleRounded;
 		mappings.bezelColor = PPAccent();
 		mappings.contentTintColor = [NSColor whiteColor];
-		mappings.frame = NSMakeRect((W - 220) / 2, topY(608, 38), 220, 38);
+		mappings.frame = NSMakeRect((W - 240) / 2, topY(652, 40), 240, 40);
 		[content addSubview:mappings];
 
 		[gWindow makeKeyAndOrderFront:nil];
@@ -434,7 +446,7 @@ void pp_app_show_editor(const char *json) {
 				docHeight += 34 + [(NSArray *)section[@"rows"] count] * 30 + 12;
 			}
 
-			NSView *doc = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, docWidth, docHeight)];
+			NSView *doc = [[PPFlippedView alloc] initWithFrame:NSMakeRect(0, 0, docWidth, docHeight)];
 			[scroll setDocumentView:doc];
 
 			gRowKeys = [NSMutableArray array];
@@ -444,7 +456,7 @@ void pp_app_show_editor(const char *json) {
 			for (NSDictionary *section in sections) {
 				NSArray *rows = section[@"rows"];
 				CGFloat cardHeight = 34 + rows.count * 30 + 6;
-				NSView *card = PPCard(NSMakeRect(0, docHeight - top - cardHeight, docWidth, cardHeight), PPElevated(), 12);
+				NSView *card = PPCard(NSMakeRect(0, top, docWidth, cardHeight), PPElevated(), 12);
 				[doc addSubview:card];
 
 				NSTextField *title = PPCaption(NSZeroRect, section[@"title"]);
