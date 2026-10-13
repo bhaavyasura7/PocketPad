@@ -2,15 +2,20 @@ package io.pocketpad.app.core
 
 import android.content.Context
 import android.graphics.Canvas
+import android.graphics.LinearGradient
 import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.RectF
+import android.graphics.Shader
+import android.os.SystemClock
 import android.util.AttributeSet
+import android.view.Choreographer
 import android.view.MotionEvent
 import android.view.View
 import io.pocketpad.protocol.Buttons
 import io.pocketpad.protocol.ControllerState
 import io.pocketpad.protocol.DPad
+import kotlin.math.sin
 
 /**
  * The multi-touch controller surface. A custom View (not Compose gestures)
@@ -46,6 +51,24 @@ class ControllerView @JvmOverloads constructor(
 
     private var labelSize = 24f
 
+    // Gaming lights: a flowing RGB glow around the border that brightens
+    // while anything is held. Driven by a Choreographer loop so frames only
+    // happen while the view is attached and the feature is on.
+    private val lightsPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val lightsClock = Choreographer.getInstance()
+    private var lightsOn = true
+    private var lightsLooping = false
+    private val lightsFrame: Choreographer.FrameCallback = object : Choreographer.FrameCallback {
+        override fun doFrame(frameTimeNanos: Long) {
+            if (!lightsOn || !isAttachedToWindow) {
+                lightsLooping = false
+                return
+            }
+            invalidate()
+            lightsClock.postFrameCallback(this)
+        }
+    }
+
     // Reused drawing objects: no allocation while drawing.
     private val fill = Paint(Paint.ANTI_ALIAS_FLAG)
     private val stroke = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE }
@@ -72,7 +95,29 @@ class ControllerView @JvmOverloads constructor(
         if (old.layoutScale != s.layoutScale || old.leftHanded != s.leftHanded) {
             layout.compute(width.toFloat(), height.toFloat(), s.layoutScale, s.leftHanded)
         }
-        invalidate()
+        val lightsChanged = lightsOn != s.gamingLights
+        lightsOn = s.gamingLights
+        if (lightsOn && !lightsLooping) {
+            startLights()
+        }
+        if (lightsChanged) invalidate()
+    }
+
+    private fun startLights() {
+        if (lightsLooping || !isAttachedToWindow) return
+        lightsLooping = true
+        lightsClock.postFrameCallback(lightsFrame)
+    }
+
+    override fun onAttachedToWindow() {
+        super.onAttachedToWindow()
+        if (lightsOn) startLights()
+    }
+
+    override fun onDetachedFromWindow() {
+        lightsLooping = false
+        releaseAll()
+        super.onDetachedFromWindow()
     }
 
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
@@ -86,11 +131,6 @@ class ControllerView @JvmOverloads constructor(
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
         if (!hasFocus) releaseAll()
-    }
-
-    override fun onDetachedFromWindow() {
-        releaseAll()
-        super.onDetachedFromWindow()
     }
 
     /** Releases everything: used on focus loss, detach and when stopping. */
@@ -246,6 +286,7 @@ class ControllerView @JvmOverloads constructor(
 
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
+        if (lightsOn) drawGamingLights(canvas)
         drawTrigger(canvas, layout.lt, drawn.lt)
         drawTrigger(canvas, layout.rt, drawn.rt)
         drawTriggerSideLabel(canvas, layout.lt, "LT")
@@ -360,6 +401,60 @@ class ControllerView @JvmOverloads constructor(
 
     private fun withAlpha(color: Int, fraction: Float): Int {
         val a = ((color ushr 24) * fraction).toInt().coerceIn(0, 255)
+        return (color and 0x00FFFFFF) or (a shl 24)
+    }
+
+    // --- gaming lights ---
+
+    /** A flowing rainbow band around the four edges, pulsing and brighter
+     * while anything is held. Three stacked thicknesses fake a soft glow. */
+    private fun drawGamingLights(canvas: Canvas) {
+        if (width <= 0 || height <= 0) return
+        val t = (SystemClock.uptimeMillis() % 6000L) / 6000f
+        val pulse = 0.8f + 0.2f * sin(t * 12.566f)
+        val active = !drawn.isNeutral
+        val alpha = pulse * (if (active) 255f else 140f)
+        edgeBands(canvas, horizontal = true, near = true, t = t, hue0 = 0.00f, alpha = alpha)
+        edgeBands(canvas, horizontal = false, near = false, t = t, hue0 = 0.25f, alpha = alpha)
+        edgeBands(canvas, horizontal = true, near = false, t = t, hue0 = 0.50f, alpha = alpha)
+        edgeBands(canvas, horizontal = false, near = true, t = t, hue0 = 0.75f, alpha = alpha)
+    }
+
+    private fun edgeBands(canvas: Canvas, horizontal: Boolean, near: Boolean, t: Float, hue0: Float, alpha: Float) {
+        val w = width.toFloat()
+        val h = height.toFloat()
+        val glow = h * 0.05f
+        val mid = h * 0.02f
+        val core = h * 0.006f
+
+        fun band(thickness: Float, opacity: Float) {
+            val colors = intArrayOf(
+                hueColor(hue0, opacity),
+                hueColor(hue0 + 0.16f, opacity),
+                hueColor(hue0 + 0.33f, opacity),
+                hueColor(hue0 + 0.5f, opacity),
+            )
+            lightsPaint.shader = if (horizontal) {
+                LinearGradient(0f, 0f, w, 0f, colors, null, Shader.TileMode.CLAMP)
+            } else {
+                LinearGradient(0f, 0f, 0f, h, colors, null, Shader.TileMode.CLAMP)
+            }
+            when {
+                horizontal && near -> canvas.drawRect(0f, 0f, w, thickness, lightsPaint)
+                horizontal -> canvas.drawRect(0f, h - thickness, w, h, lightsPaint)
+                near -> canvas.drawRect(0f, 0f, thickness, h, lightsPaint)
+                else -> canvas.drawRect(w - thickness, 0f, w, h, lightsPaint)
+            }
+        }
+        band(glow, alpha * 0.10f)
+        band(mid, alpha * 0.22f)
+        band(core, alpha)
+    }
+
+    private fun hueColor(hue: Float, opacity: Float): Int {
+        val h = (((hue % 1f) + 1f) % 1f) * 359f
+        val color = android.graphics.Color.HSVToColor(floatArrayOf(h, 0.85f, 1f))
+        val a = opacity.toInt().coerceIn(0, 255)
         return (color and 0x00FFFFFF) or (a shl 24)
     }
 }

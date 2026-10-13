@@ -79,6 +79,8 @@
     <string name="setting_lefthanded">Left‑handed layout</string>
     <string name="setting_stick_double_tap">Stick click by double‑tap</string>
     <string name="setting_stick_double_tap_summary">Off: use the separate L3 / R3 buttons.</string>
+    <string name="setting_lights">Gaming lights</string>
+    <string name="setting_lights_summary">RGB glow around the screen edges; brighter while you play.</string>
     <string name="done">Done</string>
     <string name="reset_settings">Reset to defaults</string>
     <string name="privacy_options">Privacy options</string>

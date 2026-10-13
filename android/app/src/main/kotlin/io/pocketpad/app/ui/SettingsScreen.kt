@@ -48,6 +48,7 @@ fun SettingsScreen(vm: AppViewModel) {
     var scale by remember { mutableIntStateOf(vm.prefs.layoutScalePercent) }
     var leftHanded by remember { mutableStateOf(vm.prefs.leftHanded) }
     var doubleTap by remember { mutableStateOf(vm.prefs.stickDoubleTap) }
+    var lights by remember { mutableStateOf(vm.prefs.gamingLights) }
 
     Column(
         modifier = Modifier
@@ -157,6 +158,16 @@ fun SettingsScreen(vm: AppViewModel) {
             vm.settingsChanged()
         }
 
+        SettingSwitch(
+            label = stringResource(R.string.setting_lights),
+            summary = stringResource(R.string.setting_lights_summary),
+            checked = lights,
+        ) {
+            lights = it
+            vm.prefs.gamingLights = it
+            vm.settingsChanged()
+        }
+
         Spacer(Modifier.height(16.dp))
         OutlinedButton(
             onClick = {
@@ -169,6 +180,7 @@ fun SettingsScreen(vm: AppViewModel) {
                 scale = vm.prefs.layoutScalePercent
                 leftHanded = vm.prefs.leftHanded
                 doubleTap = vm.prefs.stickDoubleTap
+                lights = vm.prefs.gamingLights
                 vm.settingsChanged()
             },
             modifier = Modifier.fillMaxWidth(),

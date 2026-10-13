@@ -43,4 +43,5 @@ data class UiSettings(
     val leftHanded: Boolean = false,
     val layoutScale: Float = 1.0f,
     val stickDoubleTap: Boolean = false,
+    val gamingLights: Boolean = true,
 )

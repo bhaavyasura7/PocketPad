@@ -98,6 +98,10 @@ class Prefs(context: Context) {
         get() = sp.getBoolean(KEY_STICK_DOUBLE_TAP, false)
         set(v) { sp.edit().putBoolean(KEY_STICK_DOUBLE_TAP, v).apply() }
 
+    var gamingLights: Boolean
+        get() = sp.getBoolean(KEY_GAMING_LIGHTS, true)
+        set(v) { sp.edit().putBoolean(KEY_GAMING_LIGHTS, v).apply() }
+
     fun uiSettings() = UiSettings(
         deadZone = deadZonePercent / 100f,
         triggerAnalog = triggerAnalog,
@@ -105,13 +109,14 @@ class Prefs(context: Context) {
         leftHanded = leftHanded,
         layoutScale = layoutScalePercent / 100f,
         stickDoubleTap = stickDoubleTap,
+        gamingLights = gamingLights,
     )
 
     fun resetSettings() {
         sp.edit()
             .remove(KEY_DEAD_ZONE).remove(KEY_TRIGGER_ANALOG).remove(KEY_RATE)
             .remove(KEY_HAPTIC).remove(KEY_VIBRATE).remove(KEY_SCALE)
-            .remove(KEY_LEFT_HANDED).remove(KEY_STICK_DOUBLE_TAP)
+            .remove(KEY_LEFT_HANDED).remove(KEY_STICK_DOUBLE_TAP).remove(KEY_GAMING_LIGHTS)
             .apply()
     }
 
@@ -129,6 +134,7 @@ class Prefs(context: Context) {
         private const val KEY_SCALE = "scale"
         private const val KEY_LEFT_HANDED = "leftHanded"
         private const val KEY_STICK_DOUBLE_TAP = "stickDoubleTap"
+        private const val KEY_GAMING_LIGHTS = "gamingLights"
         private const val PREFIX_RECEIVER = "recv:"
 
         fun bytesToHex(b: ByteArray): String {

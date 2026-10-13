@@ -187,6 +187,10 @@ app reconnects automatically, and no button comes back pressed.
 on macOS or in Bluetooth mode. To turn it off, use **Vibrate on rumble** in
 Settings.
 
+**Gaming lights.** An RGB glow flows around the screen edges while you play
+and brightens when anything is held. Turn it off under **Gaming lights** in
+Settings.
+
 ## Keyboard and mouse profiles (macOS 26)
 
 In keyboard and mouse mode, the left stick works as four keys: it presses a
