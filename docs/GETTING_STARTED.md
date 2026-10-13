@@ -240,7 +240,10 @@ The app shows the same tables under **Controls**.
 | LB | E (interact, horn) | RB | V (camera) |
 | Back | M (interaction menu) | Start | Esc (pause) |
 | Guide | Tab | LS / RS | C / R |
-| D-pad | Arrow keys | | |
+| D-pad up / down | Mouse wheel (map zoom, switch weapon) | D-pad left / right | Arrow keys |
+
+The right stick has a precision curve: light touches move the pointer
+slowly for aiming and map waypoints, a full push moves fast.
 
 Because keys are either pressed or not, steering and throttle are on or off
 in this mode. For analog control, use Bluetooth mode or a Windows computer.
