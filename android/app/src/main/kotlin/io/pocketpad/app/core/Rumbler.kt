@@ -15,7 +15,7 @@ sealed interface RumbleDecision {
     data class Vibrate(val strength: Float, val durationMs: Int) : RumbleDecision
 }
 
-/** The pure rumble decision rule; see docs/HANDOFF.md §4.2 ("Rumbler"). */
+/** The pure rumble decision rule; see docs/DEVELOPMENT.md, "Rumble". */
 object RumblePolicy {
     const val MIN_STRENGTH = 0.02f
     const val NO_AMPLITUDE_THRESHOLD = 0.3f

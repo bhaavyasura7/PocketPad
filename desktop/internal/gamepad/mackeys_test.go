@@ -131,3 +131,18 @@ func TestMouseDelta(t *testing.T) {
 		t.Fatalf("dy %v", dy)
 	}
 }
+
+func TestTriggerClicks(t *testing.T) {
+	for name, want := range map[string][2]bool{
+		"general": {false, true}, // LT left click, RT right click
+		"gta":     {true, false}, // LT aims (right click), RT fires (left click)
+	} {
+		lt, rt := macKeyProfiles[name].triggerClicks()
+		if lt != want[0] || rt != want[1] {
+			t.Errorf("%s: LT right=%v RT right=%v, want %v", name, lt, rt, want)
+		}
+	}
+	if p := macKeyProfiles["racing"]; p.LTKey == keyNone || p.RTKey == keyNone {
+		t.Error("racing triggers must be keys (brake/throttle), not clicks")
+	}
+}

@@ -7,8 +7,9 @@ import (
 )
 
 // The HID gamepad shape shared by Bluetooth mode (Android) and the macOS
-// backend (docs/HANDOFF.md §4.4): report ID 1 and 13 data bytes — 16 buttons,
-// a 4-bit hat switch plus padding, four int16 axes and two uint8 triggers.
+// backend (docs/DEVELOPMENT.md, "Bluetooth HID report"): report ID 1 and 13
+// data bytes — 16 buttons, a 4-bit hat switch plus padding, four int16 axes
+// and two uint8 triggers.
 const (
 	HIDReportID   = 1
 	HIDDataSize   = 13

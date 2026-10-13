@@ -14,7 +14,7 @@ import (
 // events only need the user's Accessibility approval.
 //
 // Profiles change the mapping per game family; `serve -profile <name>`
-// selects one. See GETTING_STARTED.md for the tables.
+// selects one. See docs/GETTING_STARTED.md for the tables.
 
 // macOS virtual key codes (ANSI layout). These are stable ABI values defined
 // by Carbon's HIToolbox Events.h.
@@ -62,8 +62,19 @@ type MacKeyProfile struct {
 	RightStickMouse               bool
 	RSUp, RSDown, RSLeft, RSRight int
 
-	// Triggers: a key when >= 0, otherwise the left/right mouse button.
-	LTKey, RTKey int
+	// Triggers: a key when >= 0, otherwise a mouse button: LT left click and
+	// RT right click, or the reverse when SwapTriggerClicks is set.
+	LTKey, RTKey      int
+	SwapTriggerClicks bool
+}
+
+// triggerClicks returns which mouse button each trigger presses when it is
+// not mapped to a key: false = left click, true = right click.
+func (p MacKeyProfile) triggerClicks() (ltRight, rtRight bool) {
+	if p.SwapTriggerClicks {
+		return true, false
+	}
+	return false, true
 }
 
 // stickKeyThresholdDefault keeps resting thumbs from walking the character.
@@ -127,6 +138,8 @@ func init() {
 		RightStickMouse: true, // mouse look; LT/RT aim and fire
 		RSUp:            keyNone, RSDown: keyNone, RSLeft: keyNone, RSRight: keyNone,
 		LTKey: keyNone, RTKey: keyNone,
+		// Like a controller: LT aims (right click), RT fires (left click).
+		SwapTriggerClicks: true,
 	}
 
 	for _, p := range []MacKeyProfile{general, racing, gta} {

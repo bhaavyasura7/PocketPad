@@ -21,8 +21,9 @@ import java.util.concurrent.locks.ReentrantLock
 import kotlin.concurrent.withLock
 
 /**
- * Bluetooth HID controller mode (docs/HANDOFF.md §4.4): the phone registers
- * as a HID gamepad and sends 13-byte reports on every change, capped at
+ * Bluetooth HID controller mode (docs/DEVELOPMENT.md, "Bluetooth HID
+ * report"): the phone registers as a HID gamepad and sends 13-byte reports
+ * on every change, capped at
  * 125 Hz, with a 100 ms resend while anything is held. Rumble is not
  * available over a generic HID pad, so it is left out.
  */

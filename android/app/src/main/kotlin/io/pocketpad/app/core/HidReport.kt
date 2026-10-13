@@ -6,8 +6,9 @@ import io.pocketpad.protocol.DPad
 
 /**
  * The Bluetooth-HID report used in Bluetooth mode: report ID 1, 13 data
- * bytes. This is the descriptor and mapping specified in docs/HANDOFF.md
- * §4.4; a known state must produce a known report (unit tested).
+ * bytes. This is the descriptor and mapping described in docs/DEVELOPMENT.md
+ * ("Bluetooth HID report"); a known state must produce a known report (unit
+ * tested).
  */
 object HidReport {
     const val REPORT_ID = 1
