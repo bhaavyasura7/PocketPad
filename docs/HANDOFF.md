@@ -16,9 +16,9 @@ normatively in [`docs/protocol.md`](protocol.md).
 | Area | Status | Verified where |
 |---|---|---|
 | Milestone 1: protocol (Go) | **Done.** Codec, sequence numbers with wraparound, HMAC session auth, pairing codes, handshake, heartbeat, rumble, discovery, version negotiation. | Unit tests, fuzzing and zero-allocation tests on Linux; CI on Linux, macOS and Windows |
-| Shared test vectors | **Done.** `protocol/testvectors/v1.json`, generated from Go. | Go tests; Kotlin tests (CI only, see §4.0) |
+| Shared test vectors | **Done.** `protocol/testvectors/v1.json`, generated from Go. | Go tests; Kotlin tests in CI |
 | Milestone 2: receiver | **Done.** `pocketpad serve`: handshake, validation, replay and stale rejection, input watchdog, session timeout, per-IP rate limiting and blocking, rumble forwarding with coalescing and refresh, live diagnostics. `ppsim` phone simulator. | End-to-end UDP tests (30/30 runs under `-race`); manual run at 250 Hz, 0 lost, about 6 µs processing |
-| Kotlin protocol module | **Written** (`android/protocol`), a pure JVM library mirroring the Go one. | **Not yet run.** Maven was rate-limited in the cloud; runs in CI job `android-protocol` |
+| Kotlin protocol module | **Done** (`android/protocol`), a pure JVM library mirroring the Go one. | CI job `android-protocol` checks it against the shared vectors |
 | Milestone 4: Windows backend | **Written** (`desktop/internal/gamepad/vigem_windows.go`): virtual Xbox 360 pad through ViGEmBus, including rumble. Mapping unit-tested. | Compiles for windows/amd64 and arm64. **Not run on a real PC.** |
 | Milestone 3: Android app | **Not started.** Full design in §4.2. | n/a |
 | Milestone 5: macOS backend | **Not started.** Approach in §4.3; this is the riskiest item. | n/a |
