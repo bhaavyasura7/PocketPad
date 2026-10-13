@@ -69,6 +69,9 @@ The phone app requires Android 9 (API 28) or later.
 The full walkthrough, including Windows driver setup, macOS permissions and
 troubleshooting, is in [docs/GETTING_STARTED.md](docs/GETTING_STARTED.md).
 
+<img width="1600" height="734" alt="PHOTO-2026-10-13-22-46-06" src="https://github.com/user-attachments/assets/53905039-f2c2-40fc-bd34-6eb7dbf43fe2" />
+
+
 ## Documentation
 
 | Document | Contents |
