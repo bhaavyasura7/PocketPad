@@ -1,17 +1,26 @@
 name: Release
 
 # Push a tag such as v0.1.0 to build every package and publish a GitHub
-# release. Tags starting with v0. or containing a hyphen are marked as
-# pre-releases. Running the workflow by hand (Actions > Release > Run
-# workflow) builds everything as a dry run without publishing.
-# See docs/DEVELOPMENT.md, "Releasing".
+# release, or run the workflow by hand (Actions > Release > Run workflow)
+# and enter the tag there: the release then creates the tag on the chosen
+# commit. Leaving the tag empty builds everything as a dry run without
+# publishing. Tags starting with v0. or containing a hyphen are marked as
+# pre-releases. See docs/DEVELOPMENT.md, "Releasing".
 on:
   push:
     tags: ['v*']
   workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to create and publish, for example v0.1.0 (empty: dry run)'
+        required: false
+        default: ''
 
 permissions:
   contents: write
+
+env:
+  RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
 
 jobs:
   desktop:
@@ -25,7 +34,7 @@ jobs:
       - name: Build and package
         run: |
           set -eu
-          V="$GITHUB_REF_NAME"
+          V="$RELEASE_TAG"
           mkdir -p dist
           build() {
             out="dist/pocketpad-$V-$1-$2"
@@ -56,10 +65,11 @@ jobs:
           go-version-file: desktop/go.mod
       - name: Build and package
         env:
-          VERSION: ${{ github.ref_name }}
           UNIVERSAL: '1'
         run: |
           set -eu
+          VERSION="$RELEASE_TAG"
+          export VERSION
           ./scripts/build-mac-app.sh
           out="dist/pocketpad-$VERSION-macos"
           mkdir -p "$out"
@@ -116,7 +126,7 @@ jobs:
           POCKETPAD_ADMOB_BANNER_ID: ${{ vars.POCKETPAD_ADMOB_BANNER_ID }}
         run: |
           set -eu
-          V="$GITHUB_REF_NAME"
+          V="$RELEASE_TAG"
           CODE="$(git rev-list --count HEAD)"
           mkdir -p ../dist
           if [ -n "${POCKETPAD_KEYSTORE_FILE:-}" ]; then
@@ -142,7 +152,7 @@ jobs:
   publish:
     name: Publish release
     needs: [desktop, macos, android]
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: startsWith(github.ref, 'refs/tags/v') || inputs.tag != ''
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -152,7 +162,10 @@ jobs:
           merge-multiple: true
       - uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ env.RELEASE_TAG }}
+          name: PocketPad ${{ env.RELEASE_TAG }}
+          target_commitish: ${{ github.sha }}
           files: dist/*
           body_path: .github/release-notes.md
           generate_release_notes: true
-          prerelease: ${{ startsWith(github.ref_name, 'v0.') || contains(github.ref_name, '-') }}
+          prerelease: ${{ startsWith(env.RELEASE_TAG, 'v0.') || contains(env.RELEASE_TAG, '-') }}
