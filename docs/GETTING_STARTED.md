@@ -104,6 +104,10 @@ status. To pass options, use `--args`:
 open dist/PocketPad.app --args -profile racing
 ```
 
+The profile is **remembered**: switching once is enough, and a plain
+double-click resumes it from then on. The window title shows the active
+profile and backend.
+
 **Accessibility permission (macOS 26).** Keyboard and mouse control needs
 permission once. When macOS asks, or in System Settings > Privacy & Security
 > Accessibility, turn on **PocketPad** if you use the Mac app, or

@@ -48,11 +48,15 @@ func runApp(args []string) error {
 	timeout := fs.Duration("session-timeout", 3*time.Second, "end the session after this long without any packet")
 	rate := fs.Int("rate", 250, "highest input rate (Hz) to request from the phone")
 	name := fs.String("name", "", "name shown on the phone (default: host name)")
-	profile := fs.String("profile", "general", "keyboard/mouse profile for the mackeys backend: "+strings.Join(gamepad.MacKeysProfileNames(), ", "))
+	profile := fs.String("profile", "", "keyboard/mouse profile for the mackeys backend: "+strings.Join(gamepad.MacKeysProfileNames(), ", ")+" (remembered for next time)")
 	cfgPath := fs.String("config", "", "config file (default: user config dir)")
 	fs.Parse(args)
 
 	f, err := loadConfig(*cfgPath)
+	if err != nil {
+		return err
+	}
+	profileName, err := resolveProfile(f, *profile)
 	if err != nil {
 		return err
 	}
@@ -67,9 +71,6 @@ func runApp(args []string) error {
 		*name, _ = os.Hostname()
 	}
 
-	if err := gamepad.SetMacKeysProfile(*profile); err != nil {
-		return err
-	}
 	pad, backendName, err := gamepad.ConnectBest(*backend)
 	if err != nil {
 		return err
@@ -121,7 +122,7 @@ func runApp(args []string) error {
 		}
 	}()
 
-	title := C.CString("PocketPad — " + backendName)
+	title := C.CString("PocketPad — " + backendName + " · profile " + profileName)
 	codeC := C.CString(code)
 	addrC := C.CString(fmt.Sprintf("%s:%d", host, port))
 	defer C.free(unsafe.Pointer(title))

@@ -18,6 +18,9 @@ import (
 type File struct {
 	PairingSecret string `json:"pairingSecret"` // hex
 	Name          string `json:"name,omitempty"`
+	// Profile is the keyboard/mouse profile last used, so a plain
+	// double-click of the Mac app resumes it.
+	Profile string `json:"profile,omitempty"`
 
 	path string
 }
@@ -76,6 +79,12 @@ func (f *File) ResetSecret() error {
 		return err
 	}
 	f.PairingSecret = hex.EncodeToString(s)
+	return f.Save()
+}
+
+// SetProfile remembers the keyboard/mouse profile and saves the file.
+func (f *File) SetProfile(name string) error {
+	f.Profile = name
 	return f.Save()
 }
 

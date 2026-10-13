@@ -32,8 +32,10 @@ func main() {
 	cmd := "serve"
 	if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
 		cmd, args = args[0], args[1:]
-	} else if len(args) == 0 && strings.Contains(os.Args[0], ".app/Contents/MacOS/") {
-		cmd = "app" // launched by double-clicking the bundle
+	} else if strings.Contains(os.Args[0], ".app/Contents/MacOS/") {
+		// The bundle always opens the window, even with flags such as
+		// "open PocketPad.app --args -profile racing".
+		cmd = "app"
 	}
 	var err error
 	switch cmd {
@@ -84,6 +86,28 @@ func loadConfig(path string) (*config.File, error) {
 	return config.Load(path)
 }
 
+// resolveProfile picks the keyboard/mouse profile: the flag wins, then the
+// profile remembered in the config, then "general"; the choice is saved so a
+// plain double-click of the Mac app resumes it.
+func resolveProfile(f *config.File, flagValue string) (string, error) {
+	name := flagValue
+	if name == "" {
+		name = f.Profile
+	}
+	if name == "" {
+		name = "general"
+	}
+	if err := gamepad.SetMacKeysProfile(name); err != nil {
+		return "", err
+	}
+	if f.Profile != name {
+		if err := f.SetProfile(name); err != nil {
+			return "", err
+		}
+	}
+	return name, nil
+}
+
 func pair(args []string) error {
 	fs := flag.NewFlagSet("pair", flag.ExitOnError)
 	reset := fs.Bool("reset", false, "generate a new code; every phone must pair again")
@@ -121,7 +145,7 @@ func serve(args []string) error {
 	name := fs.String("name", "", "name shown on the phone (default: host name)")
 	insecure := fs.Bool("insecure", false, "ALSO accept unauthenticated 20-byte packets from anyone on the network (development only)")
 	testRumble := fs.Bool("test-rumble", false, "with -backend mock: cycle rumble strong, weak, off (1s steps) to test phone vibration")
-	profile := fs.String("profile", "general", "keyboard/mouse profile for the mackeys backend: "+strings.Join(gamepad.MacKeysProfileNames(), ", "))
+	profile := fs.String("profile", "", "keyboard/mouse profile for the mackeys backend: "+strings.Join(gamepad.MacKeysProfileNames(), ", ")+" (remembered for next time)")
 	verbose := fs.Bool("v", false, "verbose logging")
 	cfgPath := fs.String("config", "", "config file (default: user config dir)")
 	fs.Parse(args)
@@ -147,7 +171,8 @@ func serve(args []string) error {
 		*name, _ = os.Hostname()
 	}
 
-	if err := gamepad.SetMacKeysProfile(*profile); err != nil {
+	profileName, err := resolveProfile(f, *profile)
+	if err != nil {
 		return err
 	}
 	pad, backendName, err := gamepad.ConnectBest(*backend)
@@ -156,6 +181,9 @@ func serve(args []string) error {
 	}
 	defer pad.Close()
 	fmt.Fprintf(os.Stderr, "Gamepad backend: %s\n", backendName)
+	if backendName == "mackeys" {
+		fmt.Fprintf(os.Stderr, "Keyboard/mouse profile: %s\n", profileName)
+	}
 	if !pad.Capabilities().OSVisible {
 		log.Warn("the mock backend is diagnostics only: games will not see a controller")
 	}
