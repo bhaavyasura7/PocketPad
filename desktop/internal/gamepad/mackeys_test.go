@@ -136,10 +136,15 @@ func TestMouseDelta(t *testing.T) {
 	if dx > 7 || dx < 5.5 {
 		t.Fatalf("half deflection delta %v, want ~6.1", dx)
 	}
-	// A light touch is precise: ~4% of maximum speed.
-	dx, _ = mouseDelta(0.1, 0, 0.02, 900)
-	if dx > 1 {
-		t.Fatalf("light deflection delta %v, want < 1", dx)
+	// A resting thumb can never creep the pointer.
+	dx, dy = mouseDelta(0.1, 0, 0.02, 900)
+	if dx != 0 || dy != 0 {
+		t.Fatalf("idle guard delta %v,%v, want 0,0", dx, dy)
+	}
+	// Just above the guard a light touch is precise: ~1.2 px per 20 ms.
+	dx, _ = mouseDelta(0.15, 0, 0.02, 900)
+	if dx < 0.5 || dx > 2 {
+		t.Fatalf("light deflection delta %v, want ~1.2", dx)
 	}
 }
 
