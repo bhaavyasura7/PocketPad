@@ -123,11 +123,8 @@ go run ./cmd/ppsim -addr 127.0.0.1:47770                   # simulated phone (re
 
 1. Open GitHub Actions for the latest commit. All four jobs must be green:
    `Desktop (ubuntu/macos/windows)` and `Kotlin protocol (shared vectors)`.
-2. The Kotlin job has **never run successfully** (it was written without
-   being executed). If it fails, fix the Kotlin code, not the vectors. Likely
-   suspects: rounding in `Codec.encodeAxis` (must round half away from zero,
-   like Go's `math.Round`), `Pairing.parse`, and `deviceId` parsing as an
-   unsigned 64-bit value in the test.
+2. All four were green at handoff (commit `2af158a`). If the Kotlin job
+   breaks later, fix the Kotlin code, not the vectors.
 3. Locally: `cd android/protocol && ./gradlew test`.
 
 ### 4.1 Validate the Windows backend on a real PC (Milestone 4)
