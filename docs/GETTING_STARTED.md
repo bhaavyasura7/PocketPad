@@ -86,6 +86,12 @@ status. To pass options, use `--args`:
 open dist/PocketPad.app --args -profile racing
 ```
 
+Run **`scripts/make-signing-cert.sh` once**: it creates a local
+"PocketPad Dev" signing identity, and the build script signs every build
+with it. The Accessibility grant is tied to the app's signature, so a
+stable identity keeps the permission across every rebuild; without it, each
+update needs a fresh grant.
+
 **Accessibility permission (macOS 26).** Keyboard and mouse control needs
 permission once. When macOS asks, or in System Settings > Privacy & Security
 > Accessibility, turn on **PocketPad** if you use the Mac app, or

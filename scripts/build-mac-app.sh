@@ -44,5 +44,20 @@ cat > "$APP/Contents/Info.plist" <<'EOF'
 EOF
 
 echo "Built $APP"
+
+# Sign with the persistent local identity when it exists (run
+# scripts/make-signing-cert.sh once). macOS ties the Accessibility grant to
+# the signature, so a stable identity means the permission survives every
+# rebuild and update.
+CERT="PocketPad Dev"
+if security find-identity -v -p codesigning 2>/dev/null | grep -q "$CERT"; then
+	codesign --force --sign "$CERT" "$APP/Contents/MacOS/pocketpad"
+	codesign --force --sign "$CERT" "$APP"
+	echo "Signed with \"$CERT\": permission grants now survive rebuilds."
+else
+	echo "Note: run scripts/make-signing-cert.sh once so future rebuilds keep"
+	echo "the macOS Accessibility permission (otherwise it must be re-granted)."
+fi
+
 echo "Open it with:  open $APP          (or double-click in Finder)"
 echo "Options, e.g.: open $APP --args -profile racing"
