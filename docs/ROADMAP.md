@@ -18,7 +18,7 @@ code is organised, see [DEVELOPMENT.md](DEVELOPMENT.md).
 | macOS app with QR pairing | Complete | Tested on macOS |
 | Bluetooth HID mode | Implemented, not yet tested on hardware | Report mapping unit tested; the test phone lacks the HID Device profile |
 | Performance measurements | Not started | |
-| Release packaging | Workflow ready; no release published yet | `release.yml`; Windows and Linux packaging tested locally |
+| Release packaging | Workflow ready; no release published yet | Dry run of `release.yml` builds every package |
 
 ## Remaining work
 
@@ -93,7 +93,8 @@ Only optimise after these baselines exist.
 The release workflow exists (see
 [DEVELOPMENT.md](DEVELOPMENT.md#releasing)). Remaining steps:
 
-1. Run the workflow once by hand as a dry run and check every package.
+1. Download the packages from the dry run (Actions > Release) and check
+   that each one starts on its platform.
 2. Create the Android release key and add it to the repository secrets.
    Do this before the first public release: Android will not install an
    update signed with a different key.
