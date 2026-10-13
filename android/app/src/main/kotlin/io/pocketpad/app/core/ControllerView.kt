@@ -6,7 +6,6 @@ import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.RectF
 import android.util.AttributeSet
-import android.view.HapticFeedbackConstants
 import android.view.MotionEvent
 import android.view.View
 import io.pocketpad.protocol.Buttons
@@ -25,6 +24,9 @@ class ControllerView @JvmOverloads constructor(
 
     /** Where derived state is published. */
     var input: InputState? = null
+
+    /** Controller feedback; null keeps the pad silent. */
+    var haptics: Haptics? = null
 
     /** Live settings (read on every event so changes apply immediately). */
     var settingsProvider: () -> UiSettings = { UiSettings() }
@@ -96,7 +98,7 @@ class ControllerView @JvmOverloads constructor(
         if (pointers.isEmpty() && drawn.isNeutral) return
         pointers.clear()
         scratch.clear()
-        publish(scratch, haptic = false, s = settingsProvider())
+        publish(scratch)
     }
 
     private fun zoneAt(x: Float, y: Float): Int = when {
@@ -137,7 +139,7 @@ class ControllerView @JvmOverloads constructor(
             }
             else -> return super.onTouchEvent(event)
         }
-        buildAndPublish(s, haptic = s.haptic)
+        buildAndPublish(s)
         return true
     }
 
@@ -166,21 +168,25 @@ class ControllerView @JvmOverloads constructor(
         }
     }
 
-    private fun buildAndPublish(s: UiSettings, haptic: Boolean) {
+    private fun buildAndPublish(s: UiSettings) {
         buildState(scratch, s)
-        publish(scratch, haptic, s)
+        publish(scratch)
     }
 
-    private fun publish(state: ControllerState, haptic: Boolean, s: UiSettings) {
+    private fun publish(state: ControllerState) {
         val gained = state.buttons and drawn.buttons.inv()
         val changed = !state.sameOnWire(drawn)
+        val dpadTurned = state.dpad != drawn.dpad && state.dpad != DPad.NEUTRAL
+        val triggerPressed = (state.lt >= 0.5f && drawn.lt < 0.5f) || (state.rt >= 0.5f && drawn.rt < 0.5f)
         if (changed) {
             input?.write(state)
             drawn.copyFrom(state)
             invalidate()
         }
-        if (haptic && gained != 0) {
-            performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+        if (gained != 0) {
+            haptics?.click()
+        } else if (dpadTurned || triggerPressed) {
+            haptics?.tick()
         }
     }
 
