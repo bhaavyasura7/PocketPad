@@ -55,6 +55,10 @@ var (
 	backends = map[string]Factory{}
 	// platformDefault is the backend "auto" selects; set by platform files.
 	platformDefault string
+	// autoCandidates is the ordered list "auto" tries until one connects;
+	// set by platform files. This is what makes a single `serve` command
+	// work from macOS 15 to macOS 26 without flags.
+	autoCandidates []string
 )
 
 // Register makes a backend available under name.
@@ -94,4 +98,43 @@ func Open(name string) (Gamepad, error) {
 		return nil, fmt.Errorf("gamepad: unknown backend %q (available: %s)", name, strings.Join(Names(), ", "))
 	}
 	return f()
+}
+
+// ConnectBest opens and connects a backend. "auto" tries every platform
+// candidate in order and returns the first that connects, so on macOS it
+// can fall back from the virtual-HID backend to keyboard/mouse control
+// without the user knowing anything about entitlements. The returned name
+// is the backend that actually started.
+func ConnectBest(name string) (Gamepad, string, error) {
+	if name != "auto" && name != "" {
+		pad, err := Open(name)
+		if err != nil {
+			return nil, name, err
+		}
+		if err := pad.Connect(); err != nil {
+			return nil, name, err
+		}
+		return pad, name, nil
+	}
+
+	candidates := append([]string(nil), autoCandidates...)
+	if len(candidates) == 0 && platformDefault != "" {
+		candidates = []string{platformDefault}
+	}
+	if len(candidates) == 0 {
+		return nil, "", ErrNoPlatformBackend
+	}
+
+	var attempts []string
+	for _, c := range candidates {
+		pad, err := Open(c)
+		if err == nil {
+			err = pad.Connect()
+		}
+		if err == nil {
+			return pad, c, nil
+		}
+		attempts = append(attempts, fmt.Sprintf("%s: %v", c, err))
+	}
+	return nil, "", fmt.Errorf("no gamepad backend could start:\n  %s", strings.Join(attempts, "\n  "))
 }

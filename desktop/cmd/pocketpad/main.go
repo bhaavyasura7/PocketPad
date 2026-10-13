@@ -32,11 +32,15 @@ func main() {
 	cmd := "serve"
 	if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
 		cmd, args = args[0], args[1:]
+	} else if len(args) == 0 && strings.Contains(os.Args[0], ".app/Contents/MacOS/") {
+		cmd = "app" // launched by double-clicking the bundle
 	}
 	var err error
 	switch cmd {
 	case "serve":
 		err = serve(args)
+	case "app":
+		err = runApp(args)
 	case "pair":
 		err = pair(args)
 	case "backends":
@@ -61,11 +65,12 @@ func usage() {
 
 Usage:
   pocketpad serve [flags]   receive input and drive a virtual gamepad (default)
+  pocketpad app [flags]     macOS window with the pairing QR code (receiver included)
   pocketpad pair [-reset]   show the pairing code to enter on the phone
   pocketpad backends        list gamepad backends
   pocketpad version
 
-Run "pocketpad serve -h" for serve flags.
+Run "pocketpad serve -h" or "pocketpad app -h" for flags.
 `)
 }
 
@@ -116,6 +121,7 @@ func serve(args []string) error {
 	name := fs.String("name", "", "name shown on the phone (default: host name)")
 	insecure := fs.Bool("insecure", false, "ALSO accept unauthenticated 20-byte packets from anyone on the network (development only)")
 	testRumble := fs.Bool("test-rumble", false, "with -backend mock: cycle rumble strong, weak, off (1s steps) to test phone vibration")
+	profile := fs.String("profile", "general", "keyboard/mouse profile for the mackeys backend: "+strings.Join(gamepad.MacKeysProfileNames(), ", "))
 	verbose := fs.Bool("v", false, "verbose logging")
 	cfgPath := fs.String("config", "", "config file (default: user config dir)")
 	fs.Parse(args)
@@ -141,14 +147,15 @@ func serve(args []string) error {
 		*name, _ = os.Hostname()
 	}
 
-	pad, err := gamepad.Open(*backend)
+	if err := gamepad.SetMacKeysProfile(*profile); err != nil {
+		return err
+	}
+	pad, backendName, err := gamepad.ConnectBest(*backend)
 	if err != nil {
 		return err
 	}
-	if err := pad.Connect(); err != nil {
-		return fmt.Errorf("gamepad backend %s: %w", *backend, err)
-	}
 	defer pad.Close()
+	fmt.Fprintf(os.Stderr, "Gamepad backend: %s\n", backendName)
 	if !pad.Capabilities().OSVisible {
 		log.Warn("the mock backend is diagnostics only: games will not see a controller")
 	}
@@ -172,7 +179,8 @@ func serve(args []string) error {
 	for _, ip := range lanAddrs() {
 		fmt.Fprintf(os.Stderr, "  address for the phone: %s:%d\n", ip, port)
 	}
-	fmt.Fprintln(os.Stderr, `Run "pocketpad pair" to see the pairing code. Press Ctrl+C to stop.`)
+	fmt.Fprintf(os.Stderr, "\n  Pairing code:  %s\n", protocol.FormatPairingCode(secret))
+	fmt.Fprintln(os.Stderr, "  Enter it in the PocketPad app (same Wi-Fi network). Press Ctrl+C to stop.")
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()

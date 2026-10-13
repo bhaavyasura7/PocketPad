@@ -1,6 +1,12 @@
 # PocketPad
 
+<img src="PocketPad.png" alt="PocketPad official logo" width="150">
+
 Turn an Android phone into a low-latency game controller for macOS and Windows.
+
+**New here? → [docs/GETTING_STARTED.md](docs/GETTING_STARTED.md)** walks you
+from zero to playing in one pass: one command on the computer, one APK on
+the phone, the pairing code is printed right in the receiver banner.
 
 - **Wi-Fi mode:** the phone sends compact, authenticated UDP packets to a small
   desktop receiver, which drives an operating-system-visible virtual gamepad.
@@ -15,11 +21,11 @@ No accounts, no cloud, and nothing leaves your local network.
 |---|---|
 | 1. Shared protocol (codec, test vectors, authentication) | ✅ done, tested |
 | 2. Desktop receiver (validation, sessions, watchdog, diagnostics) | ✅ done, tested on Linux; CI runs macOS and Windows |
-| 3. Android Wi-Fi app | ⏳ protocol module written (`android/protocol`); app to do |
+| 3. Android Wi-Fi app | ✅ done (`android/app`); unit tests, lint and CI, verified end-to-end on a real phone (motorola edge 70 fusion): all 21 controls, 0 lost packets |
 | 4. Windows virtual gamepad backend | 🧪 written (ViGEmBus, Xbox 360 pad + rumble); needs testing on a real PC |
-| 5. macOS virtual gamepad backend | ⏳ planned (needs testing on a real Mac) |
-| 6. Bluetooth HID | ⏳ planned (needs testing on a real phone) |
-| 7. Rumble on the phone, battery, measurements | ⏳ protocol and receiver side done |
+| 5. macOS backends | ✅ `machid` (real HID gamepad; macOS 15 and earlier with `sudo`, macOS 26 needs Apple's entitlement) and `mackeys` (keyboard/mouse control with game profiles: `general`, `racing`, `gta`). `serve` picks automatically |
+| 6. Bluetooth HID | 🧪 written (report descriptor + transport, unit-tested mapping). Many phones ship without the Bluetooth HID **Device** profile (e.g. motorola edge 70 fusion: HID_HOST only); the app now detects that and says so after a 5 s timeout. Needs a phone that has the profile to validate |
+| 7. Rumble on the phone, battery, indicators | ✅ phone side done: amplitude rumble, battery in every heartbeat, RTT/rate/battery overlay |
 
 **Remaining work is specified step by step in [docs/HANDOFF.md](docs/HANDOFF.md).**
 
@@ -29,15 +35,15 @@ Requires Go 1.24+.
 
 ```sh
 cd desktop
-go run ./cmd/pocketpad pair            # shows the pairing code
-go run ./cmd/pocketpad serve -backend mock
+go run ./cmd/pocketpad serve      # picks the best backend for your OS
 ```
 
-`-backend mock` drives an in-memory gamepad and shows the live controller
-state in the terminal. On Windows, the default backend (`vigem`) creates a
-virtual Xbox 360 controller; it needs [ViGEmBus](https://github.com/nefarius/ViGEmBus/releases)
-installed and `ViGEmClient.dll` next to `pocketpad.exe` (see docs/HANDOFF.md §4.1). In another terminal,
-simulate a phone:
+The banner shows the LAN address and the **pairing code** for the phone — no
+second command needed. On Windows install ViGEmBus for a real rumble-capable
+controller; on macOS 26 grant Accessibility once and the receiver controls
+the Mac (profiles: `-profile general|racing|gta`); on this Mac also
+`sudo ./pocketpad serve` for a real HID gamepad. Diagnostics-only anywhere:
+`-backend mock`. In another terminal, simulate a phone:
 
 ```sh
 go run ./cmd/ppsim -addr 127.0.0.1:47770            # reads the local pairing code
@@ -52,6 +58,67 @@ Useful `serve` flags: `-watchdog 300ms`, `-session-timeout 3s`, `-rate 250`,
 
 Allow UDP port 47770 through the desktop firewall for the phone to reach the
 receiver. On first run, Windows and macOS usually ask about this.
+
+### macOS
+
+```sh
+cd desktop
+go build -o pocketpad ./cmd/pocketpad
+sudo ./pocketpad serve          # "machid": a real virtual controller (macOS 15 and earlier)
+./pocketpad serve -backend mock # diagnostics only, no password
+```
+
+macOS has no unprivileged way to create a virtual controller. On macOS 15
+and earlier the `machid` backend works with `sudo`; **on macOS 26 Apple
+enforces the restricted `com.apple.developer.hid.virtual.device` entitlement
+for root too**, so the software backend there needs an entitlement Apple
+grants case by case. Two working options on a Mac without it:
+
+- **Control the Mac with keyboard and mouse (`mackeys`):** the phone drives
+  the Mac directly — sticks, d-pad and buttons become keys and pointer
+  movement, which works in keyboard/mouse games and for the desktop itself.
+  It needs the one-time Accessibility approval: run it, and when macOS asks
+  (or in System Settings → Privacy & Security → Accessibility) enable the
+  app that runs it (Terminal, or `pocketpad` itself).
+
+  ```sh
+  ./pocketpad serve -backend mackeys
+  ```
+
+  | Phone | Mac | Phone | Mac |
+  |---|---|---|---|
+  | Left stick | W A S D | D-pad | arrow keys |
+  | Right stick | mouse look | LT / RT | left / right click |
+  | A | Space | B | Left Shift |
+  | X | E | Y | Q |
+  | LB | Tab | RB | Escape |
+  | Back | M | Start | Return |
+  | Guide | F1 | LS / RS | C / R |
+
+- **Diagnostics:** `./pocketpad serve -backend mock` shows every input live
+  in the terminal (also what the phone pairs to for Wi-Fi testing).
+
+Rumble is not available in macOS modes.
+
+Rumble is not available in macOS Wi-Fi mode (a generic HID pad has no rumble
+channel); it works through the Windows ViGEm backend.
+
+### Android app
+
+Requires JDK 17 and the Android SDK (platform 35).
+
+```sh
+cd android
+./gradlew :app:assembleDebug
+adb install -r app/build/outputs/apk/debug/app-debug.apk
+```
+
+The app auto-discovers receivers on the local network; enter the pairing code
+from `pocketpad pair` (saved per computer afterwards) and tap Connect. The
+controller screen opens in landscape; the top-centre chip shows the live
+connection, RTT, rate and phone battery. Settings (gear icon) cover dead
+zone, analog triggers, update rate, haptics, vibration, layout size and
+left-handed mode.
 
 ## Layout
 

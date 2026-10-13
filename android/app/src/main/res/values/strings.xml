@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">PocketPad</string>
+
+    <!-- Connect screen -->
+    <string name="connect_title">PocketPad</string>
+    <string name="connect_subtitle">Use this phone as a game controller for your computer.</string>
+    <string name="mode_wifi">Wi‑Fi</string>
+    <string name="mode_bluetooth">Bluetooth</string>
+    <string name="scanning">Scanning…</string>
+    <string name="scan">Scan for receivers</string>
+    <string name="scan_qr">Scan QR code</string>
+    <string name="scan_qr_prompt">Scan the QR code shown by the PocketPad app on your computer</string>
+    <string name="qr_invalid">That QR code is not a PocketPad pairing code.</string>
+    <string name="receivers_found">Receivers found</string>
+    <string name="no_receivers">No receivers found. Make sure the receiver is running on the same Wi‑Fi network, or enter its address below.</string>
+    <string name="manual_address">Computer address</string>
+    <string name="manual_address_hint">192.168.1.20 or name.local</string>
+    <string name="port_label">Port</string>
+    <string name="pairing_code">Pairing code</string>
+    <string name="pairing_code_hint">XXXX-XXXX-XXXX-XXXX-XXXX-XXXX</string>
+    <string name="connect">Connect</string>
+    <string name="connect_error_address">Enter the computer\'s address.</string>
+    <string name="connect_error_code">That pairing code is not valid. Check it and try again.</string>
+    <string name="settings">Settings</string>
+    <string name="saved_receivers">Saved computers</string>
+    <string name="forget">Forget</string>
+
+    <!-- Controller screen -->
+    <string name="status_connecting">Connecting…</string>
+    <string name="status_waiting_host">Waiting for the computer to connect…</string>
+    <string name="status_connected">Connected</string>
+    <string name="status_reconnecting">Reconnecting…</string>
+    <string name="status_idle">Not connected</string>
+    <string name="status_rumble_test">Ready</string>
+    <string name="rtt_label">%1$d ms RTT</string>
+    <string name="rate_label">%1$d Hz</string>
+    <string name="battery_label">%1$d%%</string>
+    <string name="menu">Menu</string>
+    <string name="back_to_connect">Back to connect</string>
+    <string name="hold_to_exit">Hold to exit</string>
+    <string name="error_no_answer">No answer from the computer. Check the address and pairing code.</string>
+    <string name="error_reject_busy">Another phone is already connected. Disconnect it first.</string>
+    <string name="error_reject_version">The app and the receiver use different protocol versions. Update both.</string>
+    <string name="error_reject_other">The receiver refused the connection (%1$d).</string>
+    <string name="error_socket">Network error: %1$s</string>
+    <string name="error_disconnected">The computer ended the connection.</string>
+    <string name="error_generic">Connection error.</string>
+    <string name="error_bt_unavailable">This phone does not support Bluetooth controller mode. Use Wi‑Fi mode instead.</string>
+    <string name="error_bt_off">Bluetooth is turned off.</string>
+    <string name="error_bt_permission">Bluetooth permission is required. Grant it and try again.</string>
+    <string name="error_bt_register">Could not start Bluetooth controller mode on this phone. Use Wi‑Fi mode instead.</string>
+    <string name="error_bt_connect">Could not connect to the computer over Bluetooth.</string>
+
+    <!-- Bluetooth screen -->
+    <string name="bt_title">Bluetooth controller</string>
+    <string name="bt_explainer">Pair this phone with your computer once in the computer\'s Bluetooth settings, then connect. The computer sees a standard game controller; no app needed on the computer.</string>
+    <string name="bt_grant_permissions">Grant Bluetooth permissions</string>
+    <string name="bt_make_discoverable">Make this phone discoverable</string>
+    <string name="bt_discoverable_hint">Then add “PocketPad” in the computer\'s Bluetooth settings.</string>
+    <string name="bt_paired_computers">Paired computers</string>
+    <string name="bt_none_paired">No paired computers yet.</string>
+    <string name="bt_connect_to">Connect to %1$s</string>
+    <string name="bt_rumble_unsupported">Rumble is not available in Bluetooth mode; use Wi‑Fi mode for vibration.</string>
+
+    <!-- Settings screen -->
+    <string name="settings_title">Settings</string>
+    <string name="setting_dead_zone">Stick dead zone</string>
+    <string name="setting_dead_zone_value">%1$d%%</string>
+    <string name="setting_trigger_analog">Analog triggers</string>
+    <string name="setting_trigger_analog_summary">Off: a touch is always a full press.</string>
+    <string name="setting_rate">Updates per second</string>
+    <string name="setting_rate_value">%1$d Hz</string>
+    <string name="setting_haptic">Haptic tick on buttons</string>
+    <string name="setting_rumble">Vibrate on rumble</string>
+    <string name="setting_scale">Layout size</string>
+    <string name="setting_scale_value">%1$d%%</string>
+    <string name="setting_lefthanded">Left‑handed layout</string>
+    <string name="setting_stick_double_tap">Stick click by double‑tap</string>
+    <string name="setting_stick_double_tap_summary">Off: use the separate L3 / R3 buttons.</string>
+    <string name="done">Done</string>
+    <string name="reset_settings">Reset to defaults</string>
+
+    <!-- Controls reference -->
+    <string name="controls_title">Controls</string>
+    <string name="controls_profile_note">The active mapping is chosen on the computer:  ./pocketpad serve -profile gta | racing | general</string>
+    <string name="controls_gta">GTA V and similar  (profile: gta)</string>
+    <string name="controls_racing">Racing games  (profile: racing)</string>
+    <string name="controls_general">General / desktop / Minecraft  (profile: general)</string>
+</resources>
