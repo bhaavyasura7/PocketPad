@@ -18,7 +18,7 @@ code is organised, see [DEVELOPMENT.md](DEVELOPMENT.md).
 | macOS app with QR pairing | Complete | Tested on macOS |
 | Bluetooth HID mode | Implemented, not yet tested on hardware | Report mapping unit tested; the test phone lacks the HID Device profile |
 | Performance measurements | Not started | |
-| Release packaging | Not started | |
+| Release packaging | Workflow ready; no release published yet | `release.yml`; Windows and Linux packaging tested locally |
 
 ## Remaining work
 
@@ -88,20 +88,19 @@ operating system, Wi-Fi band and distance from the router.
 
 Only optimise after these baselines exist.
 
-### 4. Package releases
+### 4. Publish the first release
 
-1. Add a `release.yml` workflow that runs on `v*` tags and builds:
-   - receiver binaries for Windows (amd64, arm64), macOS (arm64, amd64, built
-     on macOS runners for cgo) and Linux (amd64), with
-     `-ldflags "-X main.version=$TAG"`;
-   - `PocketPad.app` for macOS;
-   - a signed release APK. Keep the signing key in repository secrets, never
-     in the repository.
-2. Ship `ViGEmClient.dll` with the Windows build after checking its
-   license, and link to the ViGEmBus installer instead of bundling it.
-3. Sign and notarise the macOS app if an Apple Developer account is
-   available.
-4. Attach everything to a GitHub release with installation notes.
+The release workflow exists (see
+[DEVELOPMENT.md](DEVELOPMENT.md#releasing)). Remaining steps:
+
+1. Run the workflow once by hand as a dry run and check every package.
+2. Create the Android release key and add it to the repository secrets.
+   Do this before the first public release: Android will not install an
+   update signed with a different key.
+3. Ship `ViGEmClient.dll` in the Windows package after checking its license,
+   and link to the ViGEmBus installer rather than bundling it.
+4. Tag `v0.1.0`.
+5. Later: notarise the macOS app with an Apple Developer account.
 
 ### 5. Optional improvements
 

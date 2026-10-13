@@ -36,7 +36,9 @@ The phone app requires Android 9 (API 28) or later.
 
 ## Quick start
 
-1. **Computer.** Build and start the receiver (Go 1.24 or later):
+1. **Computer.** Download the receiver for your system from the
+   [Releases page](https://github.com/bhaavyasura7/PocketPad/releases), or
+   build it (Go 1.24 or later), then start it:
 
    ```sh
    cd desktop
@@ -49,8 +51,8 @@ The phone app requires Android 9 (API 28) or later.
    that shows a QR code for pairing.
 
 2. **Phone.** Install the app. Download the APK from the
-   `pocketpad-android-debug` artifact of the latest CI run, or build it
-   yourself:
+   [Releases page](https://github.com/bhaavyasura7/PocketPad/releases), or
+   build it yourself:
 
    ```sh
    cd android
@@ -103,3 +105,7 @@ Held inputs are always released when input stops: the receiver releases
 everything after 300 ms without input, ends the session after 3 s of
 silence, and starts every new session with everything released. A lost
 release event cannot leave a button stuck.
+
+## License
+
+PocketPad is released under the [MIT License](LICENSE).

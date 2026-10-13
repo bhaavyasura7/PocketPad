@@ -14,6 +14,7 @@ and the rules every change must keep. The wire format itself is specified in
 6. [Bluetooth HID report](#bluetooth-hid-report)
 7. [Design rules](#design-rules)
 8. [Changing the protocol](#changing-the-protocol)
+9. [Releasing](#releasing)
 
 ## Architecture
 
@@ -98,6 +99,9 @@ cd android/protocol
 | Desktop (Linux, macOS, Windows) | `gofmt` check (Linux), `go vet`, `go test -race`, 30 s of fuzzing (Linux), and receiver plus `ppsim` binaries uploaded as artifacts |
 | Kotlin protocol | Runs the Kotlin protocol tests against the shared vectors |
 | Android app | Builds the debug APK, runs unit tests and lint, uploads the APK |
+
+`.github/workflows/release.yml` builds and publishes releases; see
+[Releasing](#releasing).
 
 ## Receiver
 
@@ -302,3 +306,74 @@ To add a message:
 
 If an existing vector changes when you regenerate, you have changed the wire
 format.
+
+## Releasing
+
+Releases are built by `.github/workflows/release.yml` and published on the
+repository's Releases page.
+
+### Publishing a release
+
+1. Make sure CI passes on `main`.
+2. Optionally, do a dry run: in GitHub, open Actions > Release > Run
+   workflow. It builds every package without publishing anything; the
+   packages appear as artifacts of that run.
+3. Tag the commit and push the tag:
+
+   ```sh
+   git tag v0.1.0
+   git push origin v0.1.0
+   ```
+
+The workflow then builds:
+
+| Package | Contents |
+|---|---|
+| `pocketpad-<tag>-windows-amd64.zip`, `-windows-arm64.zip` | `pocketpad.exe`, `ppsim.exe`, license |
+| `pocketpad-<tag>-linux-amd64.zip` | `pocketpad`, `ppsim`, license |
+| `pocketpad-<tag>-macos.zip` | `PocketPad.app`, universal `pocketpad` and `ppsim`, license |
+| `pocketpad-<tag>.apk` | The Android app, signed with the release key (`-debug.apk` if no key is configured) |
+
+and creates a GitHub release with the notes in `.github/release-notes.md`
+followed by the generated change list. Tags starting with `v0.` or
+containing a hyphen (for example `v1.0.0-rc1`) are marked as pre-releases.
+
+The tag sets the version everywhere: `pocketpad version`, the Mac app's
+`Info.plist` and the APK's version name. The APK's version code is the
+number of commits, so it always increases.
+
+### Android signing key
+
+Without a key, releases ship a debug-signed APK. That is fine for testing,
+but Android refuses to install an update signed with a different key, so
+create the release key before the first public release and keep it
+forever.
+
+1. Create a keystore (once):
+
+   ```sh
+   keytool -genkeypair -v -keystore pocketpad-release.jks -alias pocketpad \
+     -keyalg RSA -keysize 4096 -validity 10000
+   ```
+
+2. Store it somewhere safe outside the repository, with a backup. If it is
+   lost, existing installs can no longer be updated.
+3. In GitHub, open Settings > Secrets and variables > Actions and add:
+
+   | Secret | Value |
+   |---|---|
+   | `POCKETPAD_KEYSTORE_BASE64` | Output of `base64 -i pocketpad-release.jks` (macOS) or `base64 -w0 pocketpad-release.jks` (Linux) |
+   | `POCKETPAD_KEYSTORE_PASSWORD` | The keystore password |
+   | `POCKETPAD_KEY_ALIAS` | `pocketpad` |
+   | `POCKETPAD_KEY_PASSWORD` | The key password |
+
+To build a signed APK locally, set the same variables, with
+`POCKETPAD_KEYSTORE_FILE` pointing to the keystore file, and run
+`./gradlew :app:assembleRelease`.
+
+### macOS signing
+
+Release builds of the Mac app are ad-hoc signed and not notarised, so macOS
+warns on first launch. Notarisation requires an Apple Developer account; with
+one, sign with a Developer ID certificate and notarise with
+`xcrun notarytool` before packaging.
