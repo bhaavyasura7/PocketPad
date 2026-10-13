@@ -263,8 +263,8 @@ multi-touch and costs nothing per frame when idle. Compose hosts it via
   is 120–250). Send no STATE while neutral and unchanged.
 - **Receiver thread:** blocking `receive` into a preallocated buffer.
   `Codec.checkHeader`, then `Opener.open`. On HEARTBEAT, store `echo` and
-  compute `rtt = nowUs − echoUs` (`nowUs` = `SystemClock.elapsedRealtimeNanos()/1000`,
-  truncated to Int). On RUMBLE, call `Rumbler`. On DISCONNECT, end the
+  compute `rtt = max(nowUs − echoUs, 1)` (`nowUs` = `(SystemClock.elapsedRealtimeNanos()/1000).toInt() or 1`:
+  0 means "no timestamp" on the wire, so never send it). On RUMBLE, call `Rumbler`. On DISCONNECT, end the
   session and show why.
 - **Liveness:** with no authenticated packet for 3 s, the session is lost. The
   UI shows "Reconnecting…" and the transport redoes the handshake with

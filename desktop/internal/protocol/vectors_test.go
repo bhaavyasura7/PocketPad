@@ -280,6 +280,8 @@ func TestVectors(t *testing.T) {
 	if err != nil {
 		t.Fatalf("%v (run with -update to create it)", err)
 	}
+	// Tolerate a CRLF checkout (see .gitattributes).
+	got = bytes.ReplaceAll(got, []byte("\r\n"), []byte("\n"))
 	if !bytes.Equal(got, enc) {
 		t.Fatalf("%s is out of date or the wire format changed; rerun with -update and review the diff", vectorsPath)
 	}
