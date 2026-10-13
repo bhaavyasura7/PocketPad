@@ -70,9 +70,9 @@ jobs:
       - uses: android-actions/setup-android@v3
         with:
           # The action's default package list still asks for the legacy "tools"
-          # package, which Google removed from the SDK repository; install what
-          # we need explicitly instead.
-          packages: ''
+          # package, which Google removed from the SDK repository; install the
+          # rest explicitly below.
+          packages: 'platform-tools'
       - name: Install SDK packages
         run: |
           yes | sdkmanager --licenses > /dev/null || true
