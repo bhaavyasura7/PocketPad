@@ -115,6 +115,7 @@ func serve(args []string) error {
 	rate := fs.Int("rate", 250, "highest input rate (Hz) to request from the phone, 120–250 recommended")
 	name := fs.String("name", "", "name shown on the phone (default: host name)")
 	insecure := fs.Bool("insecure", false, "ALSO accept unauthenticated 20-byte packets from anyone on the network (development only)")
+	testRumble := fs.Bool("test-rumble", false, "with -backend mock: cycle rumble strong, weak, off (1s steps) to test phone vibration")
 	verbose := fs.Bool("v", false, "verbose logging")
 	cfgPath := fs.String("config", "", "config file (default: user config dir)")
 	fs.Parse(args)
@@ -216,9 +217,33 @@ func serve(args []string) error {
 		return fmt.Errorf("unknown -diag mode %q", mode)
 	}
 
+	if *testRumble {
+		mock, ok := pad.(*gamepad.Mock)
+		if !ok {
+			return fmt.Errorf("-test-rumble needs -backend mock")
+		}
+		go pulseRumble(ctx, mock)
+	}
+
 	err = srv.Serve(ctx)
 	fmt.Fprintln(os.Stderr, "\nstopped; all inputs released")
 	return err
+}
+
+// pulseRumble cycles strong, weak and no rumble, as a game would.
+func pulseRumble(ctx context.Context, m *gamepad.Mock) {
+	steps := [][2]uint16{{0xFFFF, 0xFFFF}, {0x4000, 0}, {0, 0}}
+	t := time.NewTicker(time.Second)
+	defer t.Stop()
+	for i := 0; ; i++ {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			s := steps[i%len(steps)]
+			m.SimulateRumble(s[0], s[1])
+		}
+	}
 }
 
 func isTerminal(f *os.File) bool {

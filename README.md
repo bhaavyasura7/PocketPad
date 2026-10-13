@@ -15,11 +15,13 @@ No accounts, no cloud, and nothing leaves your local network.
 |---|---|
 | 1. Shared protocol (codec, test vectors, authentication) | ✅ done, tested |
 | 2. Desktop receiver (validation, sessions, watchdog, diagnostics) | ✅ done, tested on Linux; CI runs macOS and Windows |
-| 3. Android Wi-Fi app | ⏳ next |
-| 4. Windows virtual gamepad backend | ⏳ planned (needs testing on a real PC) |
+| 3. Android Wi-Fi app | ⏳ protocol module written (`android/protocol`); app to do |
+| 4. Windows virtual gamepad backend | 🧪 written (ViGEmBus, Xbox 360 pad + rumble); needs testing on a real PC |
 | 5. macOS virtual gamepad backend | ⏳ planned (needs testing on a real Mac) |
 | 6. Bluetooth HID | ⏳ planned (needs testing on a real phone) |
 | 7. Rumble on the phone, battery, measurements | ⏳ protocol and receiver side done |
+
+**Remaining work is specified step by step in [docs/HANDOFF.md](docs/HANDOFF.md).**
 
 ## Try the receiver
 
@@ -31,8 +33,10 @@ go run ./cmd/pocketpad pair            # shows the pairing code
 go run ./cmd/pocketpad serve -backend mock
 ```
 
-Until a platform backend exists, `-backend mock` drives an in-memory gamepad
-and shows the live controller state in the terminal. In another terminal,
+`-backend mock` drives an in-memory gamepad and shows the live controller
+state in the terminal. On Windows, the default backend (`vigem`) creates a
+virtual Xbox 360 controller; it needs [ViGEmBus](https://github.com/nefarius/ViGEmBus/releases)
+installed and `ViGEmClient.dll` next to `pocketpad.exe` (see docs/HANDOFF.md §4.1). In another terminal,
 simulate a phone:
 
 ```sh
@@ -59,11 +63,11 @@ desktop/                    Go receiver
   cmd/ppsim                 phone simulator
   internal/protocol         state model, codec, sequence numbers, authentication
   internal/session          receiver: handshake, validation, watchdog, rumble
-  internal/gamepad          backend interface, mock, platform backends
+  internal/gamepad          backend interface, mock, Windows ViGEm backend
   internal/client           Go implementation of the phone side
   internal/config           pairing secret storage
   internal/diag             live diagnostic display
-android/                    Android app (coming in milestone 3)
+android/protocol/           Kotlin protocol library for the app (tested against the shared vectors)
 ```
 
 ## Design notes
