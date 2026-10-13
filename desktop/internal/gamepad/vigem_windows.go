@@ -26,6 +26,7 @@ import (
 func init() {
 	Register("vigem", func() (Gamepad, error) { return newViGEm() })
 	platformDefault = "vigem"
+	autoCandidates = []string{"vigem"}
 }
 
 const vigemErrorNone = 0x20000000
