@@ -8,10 +8,11 @@ package main
 #include <stdint.h>
 #include <stdlib.h>
 
-void pp_app_launch(const char *title, const char *code, const char *address,
+void pp_app_launch(const char *modeTitle, const char *code, const char *address,
                    const uint8_t *png, size_t pngLen,
-                   const uint8_t *logo, size_t logoLen);
-void pp_app_set_status(const char *text);
+                   const uint8_t *logo, size_t logoLen,
+                   int keyboardMode);
+void pp_app_set_status(int state, const char *title, const char *detail, const char *stats);
 */
 import "C"
 
@@ -30,7 +31,6 @@ import (
 	qrcode "github.com/skip2/go-qrcode"
 
 	"github.com/bhaavyasura7/pocketpad/desktop/internal/config"
-	"github.com/bhaavyasura7/pocketpad/desktop/internal/diag"
 	"github.com/bhaavyasura7/pocketpad/desktop/internal/gamepad"
 	"github.com/bhaavyasura7/pocketpad/desktop/internal/protocol"
 	"github.com/bhaavyasura7/pocketpad/desktop/internal/session"
@@ -169,33 +169,37 @@ func runApp(args []string) error {
 		return err
 	}
 
-	// Live status line, refreshed twice a second.
+	// Live status, refreshed twice a second.
+	keyboardMode := backendName == "mackeys"
 	go func() {
 		t := time.NewTicker(500 * time.Millisecond)
 		defer t.Stop()
 		for range t.C {
-			lines := diag.Lines(srv.Snapshot())
-			text := lines[0] + "\n" + lines[2]
-			if backendName == "mackeys" && !gamepad.MacKeysTrusted() {
-				text = "⚠︎ To control the Mac, allow Accessibility for PocketPad in " +
-					"System Settings → Privacy & Security → Accessibility.\n" + text
-			}
-			cs := C.CString(text)
-			C.pp_app_set_status(cs)
-			C.free(unsafe.Pointer(cs))
+			st := appStatusFor(srv.Snapshot(), keyboardMode && !gamepad.MacKeysTrusted())
+			title, detail, stats := C.CString(st.title), C.CString(st.detail), C.CString(st.stats)
+			C.pp_app_set_status(C.int(st.state), title, detail, stats)
+			C.free(unsafe.Pointer(title))
+			C.free(unsafe.Pointer(detail))
+			C.free(unsafe.Pointer(stats))
 		}
 	}()
 
-	title := C.CString("PocketPad — " + backendName + " · profile " + profileName)
+	modeC := C.CString(backendTitle(backendName))
 	codeC := C.CString(code)
 	addrC := C.CString(fmt.Sprintf("%s:%d", host, port))
-	defer C.free(unsafe.Pointer(title))
+	defer C.free(unsafe.Pointer(modeC))
 	defer C.free(unsafe.Pointer(codeC))
 	defer C.free(unsafe.Pointer(addrC))
+	_ = profileName // shown by the window, which asks for the current profile
 
+	keyboard := 0
+	if keyboardMode {
+		keyboard = 1
+	}
 	// Blocks until the window closes.
-	C.pp_app_launch(title, codeC, addrC,
+	C.pp_app_launch(modeC, codeC, addrC,
 		(*C.uint8_t)(unsafe.Pointer(&png[0])), C.size_t(len(png)),
-		(*C.uint8_t)(unsafe.Pointer(&pocketpadLogo[0])), C.size_t(len(pocketpadLogo)))
+		(*C.uint8_t)(unsafe.Pointer(&pocketpadLogo[0])), C.size_t(len(pocketpadLogo)),
+		C.int(keyboard))
 	return nil
 }

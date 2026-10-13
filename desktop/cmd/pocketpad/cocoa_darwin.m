@@ -1,5 +1,7 @@
 // The native macOS window for `pocketpad app`: a QR code the phone scans,
-// the pairing code, live connection status and a GUI mapping editor.
+// the pairing code, live connection status, the keyboard/mouse profile and
+// a mapping editor. Built from standard AppKit controls with Auto Layout,
+// so it follows the system appearance (light or dark) and accent colour.
 // Compiled by cgo as Objective-C; Go only calls plain C entry points.
 
 #import <Cocoa/Cocoa.h>
@@ -13,9 +15,12 @@ extern char *ppGoSaveMapping(const char *json);
 extern char *ppGoSetProfile(const char *name);
 extern char *ppGoCurrentProfileName(void);
 
-// --- palette ---------------------------------------------------------------
+// Status states sent by pp_app_set_status.
+enum { PPStateWaiting = 0, PPStateConnected = 1, PPStatePermission = 2 };
 
-/** Top-down coordinate content view for scroll documents. */
+// --- helpers ---------------------------------------------------------------
+
+/** Top-down coordinates, for the editor's scroll document. */
 @interface PPFlippedView : NSView
 @end
 
@@ -25,61 +30,130 @@ extern char *ppGoCurrentProfileName(void);
 }
 @end
 
-static NSColor *PPBackground(void) { return [NSColor colorWithSRGBRed:0.043 green:0.051 blue:0.071 alpha:1.0]; }
-static NSColor *PPElevated(void) { return [NSColor colorWithSRGBRed:0.075 green:0.086 blue:0.118 alpha:1.0]; }
-static NSColor *PPChip(void) { return [NSColor colorWithSRGBRed:0.11 green:0.125 blue:0.17 alpha:1.0]; }
-static NSColor *PPAccent(void) { return [NSColor colorWithSRGBRed:0.486 green:0.361 blue:1.0 alpha:1.0]; }
-
-/** A rounded panel. */
-static NSView *PPCard(NSRect frame, NSColor *color, CGFloat radius) {
-	NSView *view = [[NSView alloc] initWithFrame:frame];
-	view.wantsLayer = YES;
-	view.layer.backgroundColor = color.CGColor;
-	view.layer.cornerRadius = radius;
-	return view;
-}
-
-/** Small uppercase caption. */
-static NSTextField *PPCaption(NSRect frame, NSString *text) {
-	NSTextField *label = [NSTextField labelWithString:text];
-	label.font = [NSFont systemFontOfSize:10 weight:NSFontWeightSemibold];
-	label.textColor = [NSColor tertiaryLabelColor];
-	return label;
-}
-
-static NSTextField *PPLabel(NSRect frame, NSString *text, CGFloat size, NSColor *color) {
-	NSTextField *label = [NSTextField labelWithString:text];
-	label.font = [NSFont systemFontOfSize:size];
+static NSTextField *PPText(NSString *text, NSFont *font, NSColor *color) {
+	NSTextField *label = [NSTextField labelWithString:text ?: @""];
+	label.font = font;
 	label.textColor = color;
+	label.translatesAutoresizingMaskIntoConstraints = NO;
 	return label;
 }
 
-// --- main window state -----------------------------------------------------
+/** A wrapping, centred label limited to a preferred width. */
+static NSTextField *PPWrapping(NSString *text, NSFont *font, NSColor *color, CGFloat width) {
+	NSTextField *label = [NSTextField wrappingLabelWithString:text ?: @""];
+	label.font = font;
+	label.textColor = color;
+	label.alignment = NSTextAlignmentCenter;
+	label.preferredMaxLayoutWidth = width;
+	label.translatesAutoresizingMaskIntoConstraints = NO;
+	return label;
+}
+
+/** A section background that tracks the system appearance. */
+static NSBox *PPGroup(void) {
+	NSBox *box = [[NSBox alloc] init];
+	box.boxType = NSBoxCustom;
+	box.titlePosition = NSNoTitle;
+	box.fillColor = [NSColor controlBackgroundColor];
+	box.borderColor = [NSColor separatorColor];
+	box.borderWidth = 1;
+	box.cornerRadius = 8;
+	box.contentViewMargins = NSZeroSize;
+	return box;
+}
+
+static void PPAddItem(NSPopUpButton *popup, NSString *title, NSString *value) {
+	[popup addItemWithTitle:title];
+	popup.lastItem.representedObject = value;
+}
+
+static BOOL PPSelectValue(NSPopUpButton *popup, NSString *value) {
+	for (NSMenuItem *item in popup.itemArray) {
+		if ([item.representedObject isEqual:value]) {
+			[popup selectItem:item];
+			return YES;
+		}
+	}
+	return NO;
+}
+
+static NSString *PPSelectedValue(NSPopUpButton *popup) {
+	id value = popup.selectedItem.representedObject;
+	return [value isKindOfClass:[NSString class]] ? value : @"none";
+}
+
+static NSArray *PPProfiles(void) {
+	return @[@[@"general", @"General"], @[@"racing", @"Racing"], @[@"gta", @"GTA"], @[@"custom", @"Custom"]];
+}
+
+static NSString *PPProfileTitle(NSString *name) {
+	for (NSArray *p in PPProfiles()) {
+		if ([p[0] isEqualToString:name]) {
+			return p[1];
+		}
+	}
+	return name;
+}
+
+static NSPopUpButton *PPMakeProfilePopup(void) {
+	NSPopUpButton *popup = [[NSPopUpButton alloc] initWithFrame:NSZeroRect pullsDown:NO];
+	for (NSArray *p in PPProfiles()) {
+		PPAddItem(popup, p[1], p[0]);
+	}
+	return popup;
+}
+
+static NSString *PPCurrentProfile(void) {
+	char *c = ppGoCurrentProfileName();
+	NSString *name = [NSString stringWithUTF8String:(c != NULL ? c : "general")];
+	if (c != NULL) {
+		free((void *)c);
+	}
+	return name;
+}
+
+// --- state -----------------------------------------------------------------
 
 static NSWindow *gWindow = nil;
-static NSTextField *gStatus = nil;
-static NSTextField *gPillText = nil;
+static NSImageView *gStatusDot = nil;
+static NSTextField *gStatusTitle = nil;
+static NSTextField *gStatusDetail = nil;
+static NSTextField *gStats = nil;
+static NSView *gPermissionBanner = nil;
+static NSButton *gCopyButton = nil;
+static NSPopUpButton *gMainProfilePopup = nil;
 static NSString *gCodeString = nil;
+static NSString *gModeTitle = nil;
+static BOOL gKeyboardMode = NO;
 
-// Editor state.
 static NSWindow *gEditorWindow = nil;
-static NSPopUpButton *gProfilePopup = nil;
+static NSPopUpButton *gEditorProfilePopup = nil;
 static NSTextField *gEditorStatus = nil;
 static NSMutableArray *gRowKeys = nil;
 static NSMutableArray *gRowPopups = nil;
 static NSDictionary *gJSON = nil;
+
 void pp_app_show_editor(const char *json);
 static void PPFillRowsFromJSON(void);
 static NSDictionary *PPBuildDoc(void);
 static void PPEditorStatus(NSString *text);
 
+/** Reflects the active profile in the subtitle and both profile menus. */
+static void PPShowProfile(NSString *name) {
+	if (gKeyboardMode) {
+		gWindow.subtitle = [NSString stringWithFormat:@"%@ · %@ profile", gModeTitle, PPProfileTitle(name)];
+	}
+	if (gMainProfilePopup != nil) {
+		PPSelectValue(gMainProfilePopup, name);
+	}
+	if (gEditorProfilePopup != nil) {
+		PPSelectValue(gEditorProfilePopup, name);
+	}
+}
+
+// --- delegate --------------------------------------------------------------
+
 @interface PPAppDelegate : NSObject <NSApplicationDelegate>
-- (void)showMappings:(id)sender;
-- (void)profileChanged:(id)sender;
-- (void)saveMapping:(id)sender;
-- (void)reloadMapping:(id)sender;
-- (void)closeEditor:(id)sender;
-- (void)copyCode:(id)sender;
 @end
 
 @implementation PPAppDelegate
@@ -98,33 +172,43 @@ static void PPEditorStatus(NSString *text);
 	NSPasteboard *pb = [NSPasteboard generalPasteboard];
 	[pb clearContents];
 	[pb setString:gCodeString forType:NSPasteboardTypeString];
-	PPEditorStatus(nil);
+	gCopyButton.title = @"Copied";
+	dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+		gCopyButton.title = @"Copy";
+	});
+}
+
+- (void)openAccessibilitySettings:(id)sender {
+	NSURL *url = [NSURL URLWithString:@"x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"];
+	[[NSWorkspace sharedWorkspace] openURL:url];
 }
 
 - (void)profileChanged:(id)sender {
-	NSPopUpButton *popup = (NSPopUpButton *)sender;
-	NSString *name = popup.titleOfSelectedItem;
+	NSString *name = PPSelectedValue((NSPopUpButton *)sender);
+	NSString *previous = PPCurrentProfile();
 	char *err = ppGoSetProfile(name.UTF8String);
 	if (err != NULL) {
 		free((void *)err);
+		PPShowProfile(previous);
 		if ([name isEqualToString:@"custom"]) {
-			// No custom mapping exists yet: point at the rows instead of an
-			// error, and let the user build one with Save.
-			PPEditorStatus(@"No custom mapping yet — adjust the rows below and press Save & use.");
-			return;
+			// No custom mapping exists yet: open the editor to create one.
+			pp_app_show_editor(ppGoCurrentMappingJSON());
+			PPEditorStatus(@"There is no custom mapping yet. Choose keys below, then click Save.");
+		} else {
+			PPEditorStatus([NSString stringWithFormat:@"Could not switch to the %@ profile.", PPProfileTitle(name)]);
 		}
-		PPEditorStatus([NSString stringWithFormat:@"Could not switch to %@", name]);
+		return;
 	}
-	char *current = ppGoCurrentMappingJSON();
-	pp_app_show_editor(current); // refill rows from the now-active mapping
+	PPShowProfile(name);
+	if (gEditorWindow != nil && gEditorWindow.visible) {
+		pp_app_show_editor(ppGoCurrentMappingJSON());
+	}
 }
 
 - (void)saveMapping:(id)sender {
-	NSDictionary *doc = PPBuildDoc();
-	NSError *encodeError = nil;
-	NSData *data = [NSJSONSerialization dataWithJSONObject:doc options:NSJSONWritingPrettyPrinted error:&encodeError];
+	NSData *data = [NSJSONSerialization dataWithJSONObject:PPBuildDoc() options:NSJSONWritingPrettyPrinted error:NULL];
 	if (data == nil) {
-		gEditorStatus.stringValue = @"Could not encode the mapping.";
+		PPEditorStatus(@"The mapping could not be encoded.");
 		return;
 	}
 	NSString *text = [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
@@ -132,21 +216,19 @@ static void PPEditorStatus(NSString *text);
 	if (err != NULL) {
 		NSString *message = [NSString stringWithUTF8String:err];
 		free((void *)err);
-		gEditorStatus.stringValue = @"Not saved — see the dialog.";
 		NSAlert *alert = [[NSAlert alloc] init];
-		alert.messageText = @"Mapping not saved";
+		alert.messageText = @"The mapping could not be saved.";
 		alert.informativeText = message;
-		[alert runModal];
+		[alert beginSheetModalForWindow:gEditorWindow completionHandler:nil];
 		return;
 	}
-	gEditorStatus.stringValue = @"Saved — active now";
-	[gProfilePopup selectItemWithTitle:@"custom"];
+	PPShowProfile(@"custom");
+	PPEditorStatus(@"Saved. The custom profile is now active.");
 }
 
-- (void)reloadMapping:(id)sender {
-	char *current = ppGoCurrentMappingJSON();
-	pp_app_show_editor(current);
-	gEditorStatus.stringValue = @"Reloaded from the active mapping";
+- (void)revertMapping:(id)sender {
+	pp_app_show_editor(ppGoCurrentMappingJSON());
+	PPEditorStatus(@"Reverted to the active mapping.");
 }
 
 - (void)closeEditor:(id)sender {
@@ -156,154 +238,228 @@ static void PPEditorStatus(NSString *text);
 
 static PPAppDelegate *gDelegate = nil;
 
-// Updates the status line and the header pill from any thread.
-void pp_app_set_status(const char *text) {
-	NSString *value = [NSString stringWithUTF8String:(text ? text : "")];
+// --- menu bar --------------------------------------------------------------
+
+static void PPInstallMenu(void) {
+	NSMenu *main = [[NSMenu alloc] init];
+
+	NSMenu *appMenu = [[NSMenu alloc] initWithTitle:@"PocketPad"];
+	[appMenu addItemWithTitle:@"About PocketPad" action:@selector(orderFrontStandardAboutPanel:) keyEquivalent:@""];
+	[appMenu addItem:[NSMenuItem separatorItem]];
+	[appMenu addItemWithTitle:@"Hide PocketPad" action:@selector(hide:) keyEquivalent:@"h"];
+	NSMenuItem *hideOthers = [appMenu addItemWithTitle:@"Hide Others" action:@selector(hideOtherApplications:) keyEquivalent:@"h"];
+	hideOthers.keyEquivalentModifierMask = NSEventModifierFlagOption | NSEventModifierFlagCommand;
+	[appMenu addItemWithTitle:@"Show All" action:@selector(unhideAllApplications:) keyEquivalent:@""];
+	[appMenu addItem:[NSMenuItem separatorItem]];
+	[appMenu addItemWithTitle:@"Quit PocketPad" action:@selector(terminate:) keyEquivalent:@"q"];
+	[main addItemWithTitle:@"" action:nil keyEquivalent:@""].submenu = appMenu;
+
+	NSMenu *edit = [[NSMenu alloc] initWithTitle:@"Edit"];
+	[edit addItemWithTitle:@"Cut" action:@selector(cut:) keyEquivalent:@"x"];
+	[edit addItemWithTitle:@"Copy" action:@selector(copy:) keyEquivalent:@"c"];
+	[edit addItemWithTitle:@"Paste" action:@selector(paste:) keyEquivalent:@"v"];
+	[edit addItemWithTitle:@"Select All" action:@selector(selectAll:) keyEquivalent:@"a"];
+	[main addItemWithTitle:@"Edit" action:nil keyEquivalent:@""].submenu = edit;
+
+	NSMenu *window = [[NSMenu alloc] initWithTitle:@"Window"];
+	[window addItemWithTitle:@"Minimize" action:@selector(performMiniaturize:) keyEquivalent:@"m"];
+	[window addItemWithTitle:@"Close" action:@selector(performClose:) keyEquivalent:@"w"];
+	[main addItemWithTitle:@"Window" action:nil keyEquivalent:@""].submenu = window;
+
+	NSApp.mainMenu = main;
+	NSApp.windowsMenu = window;
+}
+
+// --- status ----------------------------------------------------------------
+
+// Updates the status area from any thread.
+void pp_app_set_status(int state, const char *title, const char *detail, const char *stats) {
+	NSString *t = [NSString stringWithUTF8String:(title ? title : "")];
+	NSString *d = [NSString stringWithUTF8String:(detail ? detail : "")];
+	NSString *s = [NSString stringWithUTF8String:(stats ? stats : "")];
 	dispatch_async(dispatch_get_main_queue(), ^{
-		if (gStatus != nil) {
-			gStatus.stringValue = value;
+		if (gStatusTitle == nil) {
+			return;
 		}
-		if (gPillText != nil) {
-			NSColor *color = [NSColor systemOrangeColor];
-			NSString *summary = @"Waiting";
-			if ([value hasPrefix:@"●"]) {
-				color = [NSColor systemGreenColor];
-				summary = @"Connected";
-			} else if ([value hasPrefix:@"⚠"]) {
-				color = [NSColor systemOrangeColor];
-				summary = @"Permission needed";
-			}
-			NSMutableAttributedString *line = [[NSMutableAttributedString alloc] initWithString:[NSString stringWithFormat:@"● %@", summary]];
-			[line addAttribute:NSForegroundColorAttributeName value:color range:NSMakeRange(0, 1)];
-			[line addAttribute:NSForegroundColorAttributeName value:[NSColor labelColor] range:NSMakeRange(1, line.length - 1)];
-			[line addAttribute:NSFontAttributeName value:[NSFont systemFontOfSize:12] range:NSMakeRange(0, line.length)];
-			gPillText.attributedStringValue = line;
+		NSColor *color = [NSColor systemOrangeColor];
+		if (state == PPStateConnected) {
+			color = [NSColor systemGreenColor];
 		}
+		gStatusDot.contentTintColor = color;
+		gStatusTitle.stringValue = t;
+		gStatusDetail.stringValue = d;
+		gStats.stringValue = s;
+		gStats.hidden = (s.length == 0);
+		gPermissionBanner.hidden = (state != PPStatePermission);
 	});
 }
 
+// --- main window -----------------------------------------------------------
+
+static NSView *PPPermissionBanner(CGFloat width) {
+	NSBox *box = PPGroup();
+	box.fillColor = [[NSColor systemOrangeColor] colorWithAlphaComponent:0.12];
+	box.borderColor = [[NSColor systemOrangeColor] colorWithAlphaComponent:0.35];
+	box.translatesAutoresizingMaskIntoConstraints = NO;
+
+	NSImageView *icon = [NSImageView imageViewWithImage:[NSImage imageWithSystemSymbolName:@"exclamationmark.triangle.fill" accessibilityDescription:@"Warning"]];
+	icon.contentTintColor = [NSColor systemOrangeColor];
+	NSTextField *text = [NSTextField wrappingLabelWithString:@"PocketPad needs Accessibility permission to control this Mac."];
+	text.font = [NSFont systemFontOfSize:12];
+	text.preferredMaxLayoutWidth = width - 180;
+	NSButton *open = [NSButton buttonWithTitle:@"Open Settings" target:gDelegate action:@selector(openAccessibilitySettings:)];
+	open.controlSize = NSControlSizeSmall;
+
+	NSStackView *row = [NSStackView stackViewWithViews:@[icon, text, open]];
+	row.orientation = NSUserInterfaceLayoutOrientationHorizontal;
+	row.alignment = NSLayoutAttributeCenterY;
+	row.spacing = 8;
+	row.edgeInsets = NSEdgeInsetsMake(10, 12, 10, 12);
+	row.translatesAutoresizingMaskIntoConstraints = NO;
+	[text setContentCompressionResistancePriority:NSLayoutPriorityDefaultLow forOrientation:NSLayoutConstraintOrientationHorizontal];
+	[box.contentView addSubview:row];
+	[NSLayoutConstraint activateConstraints:@[
+		[row.leadingAnchor constraintEqualToAnchor:box.contentView.leadingAnchor],
+		[row.trailingAnchor constraintEqualToAnchor:box.contentView.trailingAnchor],
+		[row.topAnchor constraintEqualToAnchor:box.contentView.topAnchor],
+		[row.bottomAnchor constraintEqualToAnchor:box.contentView.bottomAnchor],
+		[box.widthAnchor constraintEqualToConstant:width],
+	]];
+	box.hidden = YES;
+	return box;
+}
+
 // Builds the window and runs the application loop (blocks until quit).
-void pp_app_launch(const char *title, const char *code, const char *address,
+void pp_app_launch(const char *modeTitle, const char *code, const char *address,
                    const uint8_t *png, size_t pngLen,
-                   const uint8_t *logo, size_t logoLen) {
+                   const uint8_t *logo, size_t logoLen,
+                   int keyboardMode) {
 	@autoreleasepool {
 		NSApplication *app = [NSApplication sharedApplication];
 		[app setActivationPolicy:NSApplicationActivationPolicyRegular];
-		app.appearance = [NSAppearance appearanceNamed:NSAppearanceNameDarkAqua];
 		gDelegate = [[PPAppDelegate alloc] init];
 		[app setDelegate:gDelegate];
-		gCodeString = [NSString stringWithUTF8String:code];
-
-		CGFloat W = 540;
-		CGFloat H = 740;
-		CGFloat (^topY)(CGFloat, CGFloat) = ^CGFloat(CGFloat top, CGFloat h) { return H - top - h; };
-
-		NSWindowStyleMask style = NSWindowStyleMaskTitled | NSWindowStyleMaskClosable | NSWindowStyleMaskMiniaturizable;
-		gWindow = [[NSWindow alloc] initWithContentRect:NSMakeRect(0, 0, W, H) styleMask:style backing:NSBackingStoreBuffered defer:NO];
-		gWindow.title = [NSString stringWithUTF8String:title];
-		gWindow.releasedWhenClosed = NO;
-		gWindow.backgroundColor = PPBackground();
-		gWindow.titlebarAppearsTransparent = YES;
-		gWindow.appearance = [NSAppearance appearanceNamed:NSAppearanceNameDarkAqua];
-		[gWindow center];
-		NSView *content = gWindow.contentView;
-
-		// Header: logo, wordmark, live status pill.
 		if (logo != NULL && logoLen > 0) {
-			NSImageView *logoView = [[NSImageView alloc] initWithFrame:NSMakeRect(28, topY(26, 44), 44, 44)];
-			logoView.image = [[NSImage alloc] initWithData:[NSData dataWithBytes:logo length:logoLen]];
-			logoView.imageScaling = NSImageScaleProportionallyUpOrDown;
-			logoView.wantsLayer = YES;
-			logoView.layer.cornerRadius = 10;
-			logoView.layer.masksToBounds = YES;
-			[content addSubview:logoView];
+			// Dock icon and About panel when run outside the app bundle.
+			app.applicationIconImage = [[NSImage alloc] initWithData:[NSData dataWithBytes:logo length:logoLen]];
 		}
-		NSTextField *wordmark = [NSTextField labelWithString:@"PocketPad"];
-		wordmark.font = [NSFont boldSystemFontOfSize:21];
-		wordmark.frame = NSMakeRect(86, topY(37, 26), 220, 26);
-		[content addSubview:wordmark];
+		PPInstallMenu();
 
-		NSView *pill = PPCard(NSMakeRect(W - 28 - 240, topY(30, 32), 240, 32), PPChip(), 16);
-		[content addSubview:pill];
-		gPillText = PPLabel(NSMakeRect(0, 8, 240, 16), @"◌ Starting…", 12, [NSColor labelColor]);
-		gPillText.alignment = NSTextAlignmentCenter;
-		[pill addSubview:gPillText];
+		gCodeString = [NSString stringWithUTF8String:code];
+		gModeTitle = [NSString stringWithUTF8String:modeTitle];
+		gKeyboardMode = keyboardMode != 0;
+		const CGFloat width = 380;
 
-		NSView *divider = [[NSView alloc] initWithFrame:NSMakeRect(0, topY(90, 1), W, 1)];
-		divider.wantsLayer = YES;
-		divider.layer.backgroundColor = [[NSColor colorWithWhite:1 alpha:0.07] CGColor];
-		[content addSubview:divider];
+		gWindow = [[NSWindow alloc] initWithContentRect:NSMakeRect(0, 0, 440, 600)
+		                                      styleMask:NSWindowStyleMaskTitled | NSWindowStyleMaskClosable | NSWindowStyleMaskMiniaturizable
+		                                        backing:NSBackingStoreBuffered
+		                                          defer:NO];
+		gWindow.title = @"PocketPad";
+		gWindow.subtitle = gModeTitle;
+		gWindow.releasedWhenClosed = NO;
 
-		// Pairing card: QR with a glow, caption, code chip with Copy, address.
-		NSView *hero = PPCard(NSMakeRect(28, topY(112, 400), W - 56, 400), PPElevated(), 16);
-		[content addSubview:hero];
+		// Status: coloured dot, headline and one line of detail.
+		NSImage *dotImage = [NSImage imageWithSystemSymbolName:@"circle.fill" accessibilityDescription:@"Status"];
+		gStatusDot = [NSImageView imageViewWithImage:dotImage];
+		gStatusDot.symbolConfiguration = [NSImageSymbolConfiguration configurationWithPointSize:9 weight:NSFontWeightRegular];
+		gStatusDot.contentTintColor = [NSColor systemOrangeColor];
+		gStatusTitle = PPText(@"Starting…", [NSFont systemFontOfSize:15 weight:NSFontWeightSemibold], [NSColor labelColor]);
+		NSStackView *headline = [NSStackView stackViewWithViews:@[gStatusDot, gStatusTitle]];
+		headline.orientation = NSUserInterfaceLayoutOrientationHorizontal;
+		headline.alignment = NSLayoutAttributeCenterY;
+		headline.spacing = 6;
+		gStatusDetail = PPWrapping(@"", [NSFont systemFontOfSize:12], [NSColor secondaryLabelColor], width);
 
-		CGFloat heroW = W - 56;
-		NSView *qrCard = [[NSView alloc] initWithFrame:NSMakeRect((heroW - 250) / 2, 400 - 24 - 250, 250, 250)];
-		qrCard.wantsLayer = YES;
-		qrCard.layer.backgroundColor = [[NSColor whiteColor] CGColor];
-		qrCard.layer.cornerRadius = 14;
-		qrCard.layer.shadowColor = PPAccent().CGColor;
-		qrCard.layer.shadowOpacity = 0.5;
-		qrCard.layer.shadowRadius = 18;
-		qrCard.layer.shadowOffset = CGSizeMake(0, -2);
-		[hero addSubview:qrCard];
+		gPermissionBanner = PPPermissionBanner(width);
 
-		NSImageView *qr = [[NSImageView alloc] initWithFrame:NSMakeRect(13, 13, 224, 224)];
+		// QR code on white, as scanners expect.
+		NSBox *qrBox = PPGroup();
+		qrBox.fillColor = [NSColor whiteColor];
+		qrBox.cornerRadius = 12;
+		qrBox.translatesAutoresizingMaskIntoConstraints = NO;
+		NSImageView *qr = [[NSImageView alloc] init];
 		qr.image = [[NSImage alloc] initWithData:[NSData dataWithBytes:png length:pngLen]];
 		qr.imageScaling = NSImageScaleProportionallyUpOrDown;
-		[qrCard addSubview:qr];
+		qr.translatesAutoresizingMaskIntoConstraints = NO;
+		[qrBox.contentView addSubview:qr];
+		[NSLayoutConstraint activateConstraints:@[
+			[qrBox.widthAnchor constraintEqualToConstant:220],
+			[qrBox.heightAnchor constraintEqualToConstant:220],
+			[qr.centerXAnchor constraintEqualToAnchor:qrBox.contentView.centerXAnchor],
+			[qr.centerYAnchor constraintEqualToAnchor:qrBox.contentView.centerYAnchor],
+			[qr.widthAnchor constraintEqualToConstant:196],
+			[qr.heightAnchor constraintEqualToConstant:196],
+		]];
 
-		NSTextField *scanHelp = PPCaption(NSZeroRect, @"SCAN WITH THE POCKETPAD APP, OR TYPE THE CODE");
-		scanHelp.alignment = NSTextAlignmentCenter;
-		scanHelp.frame = NSMakeRect(0, 400 - 292 - 14, heroW, 14);
-		[hero addSubview:scanHelp];
+		NSTextField *scanHelp = PPWrapping(@"Scan this code with the PocketPad app on your phone, or enter the pairing code.",
+		                                   [NSFont systemFontOfSize:12], [NSColor secondaryLabelColor], width);
 
-		NSView *codeChip = PPCard(NSMakeRect(42, 400 - 316 - 44, heroW - 84, 44), PPChip(), 10);
-		[hero addSubview:codeChip];
-		NSTextField *codeField = [NSTextField labelWithString:gCodeString];
-		codeField.font = [NSFont monospacedSystemFontOfSize:15 weight:NSFontWeightSemibold];
-		codeField.textColor = PPAccent();
-		codeField.alignment = NSTextAlignmentCenter;
+		// Pairing code with Copy.
+		NSTextField *codeField = PPText(gCodeString, [NSFont monospacedSystemFontOfSize:16 weight:NSFontWeightMedium], [NSColor labelColor]);
 		codeField.selectable = YES;
-		codeField.frame = NSMakeRect(12, 13, codeChip.frame.size.width - 108, 18);
-		[codeChip addSubview:codeField];
-		NSButton *copy = [NSButton buttonWithTitle:@"Copy" target:gDelegate action:@selector(copyCode:)];
-		copy.bezelStyle = NSBezelStyleRounded;
-		copy.controlSize = NSControlSizeSmall;
-		copy.frame = NSMakeRect(codeChip.frame.size.width - 88, 8, 78, 28);
-		[codeChip addSubview:copy];
+		gCopyButton = [NSButton buttonWithTitle:@"Copy" target:gDelegate action:@selector(copyCode:)];
+		NSStackView *codeRow = [NSStackView stackViewWithViews:@[codeField, gCopyButton]];
+		codeRow.orientation = NSUserInterfaceLayoutOrientationHorizontal;
+		codeRow.alignment = NSLayoutAttributeCenterY;
+		codeRow.spacing = 10;
 
-		NSTextField *addrField = [NSTextField labelWithString:[NSString stringWithUTF8String:address]];
-		addrField.font = [NSFont monospacedSystemFontOfSize:11 weight:NSFontWeightRegular];
-		addrField.textColor = [NSColor secondaryLabelColor];
-		addrField.alignment = NSTextAlignmentCenter;
+		NSTextField *addrField = PPText([NSString stringWithFormat:@"Address: %s", address],
+		                                [NSFont monospacedDigitSystemFontOfSize:12 weight:NSFontWeightRegular], [NSColor secondaryLabelColor]);
 		addrField.selectable = YES;
-		addrField.frame = NSMakeRect(0, 16, heroW, 16);
-		[hero addSubview:addrField];
 
-		// Live status card.
-		NSView *statusCard = PPCard(NSMakeRect(28, topY(528, 100), W - 56, 100), PPElevated(), 16);
-		[content addSubview:statusCard];
-		NSTextField *statusCap = PPCaption(NSZeroRect, @"LIVE STATUS");
-		statusCap.frame = NSMakeRect(18, 100 - 14 - 16, 200, 14);
-		[statusCard addSubview:statusCap];
-		gStatus = [NSTextField labelWithString:@"Starting…"];
-		gStatus.font = [NSFont systemFontOfSize:11];
-		gStatus.textColor = [NSColor secondaryLabelColor];
-		gStatus.maximumNumberOfLines = 3;
-		gStatus.lineBreakMode = NSLineBreakByWordWrapping;
-		gStatus.frame = NSMakeRect(18, 12, W - 56 - 36, 56);
-		[statusCard addSubview:gStatus];
+		gStats = PPWrapping(@"", [NSFont monospacedDigitSystemFontOfSize:11 weight:NSFontWeightRegular], [NSColor tertiaryLabelColor], width);
+		gStats.hidden = YES;
 
-		// Bottom bar.
-		NSButton *mappings = [NSButton buttonWithTitle:@"Mapping editor…" target:gDelegate action:@selector(showMappings:)];
-		mappings.bezelStyle = NSBezelStyleRounded;
-		mappings.bezelColor = PPAccent();
-		mappings.contentTintColor = [NSColor whiteColor];
-		mappings.frame = NSMakeRect((W - 240) / 2, topY(652, 40), 240, 40);
-		[content addSubview:mappings];
+		NSMutableArray *views = [NSMutableArray arrayWithArray:@[headline, gStatusDetail, gPermissionBanner, qrBox, scanHelp, codeRow, addrField, gStats]];
 
+		// Keyboard and mouse mode: profile menu and the mapping editor.
+		if (gKeyboardMode) {
+			NSBox *separator = [[NSBox alloc] init];
+			separator.boxType = NSBoxSeparator;
+			separator.translatesAutoresizingMaskIntoConstraints = NO;
+			[separator.widthAnchor constraintEqualToConstant:width].active = YES;
+
+			NSTextField *profileLabel = PPText(@"Profile:", [NSFont systemFontOfSize:13], [NSColor labelColor]);
+			gMainProfilePopup = PPMakeProfilePopup();
+			gMainProfilePopup.target = gDelegate;
+			gMainProfilePopup.action = @selector(profileChanged:);
+			NSButton *edit = [NSButton buttonWithTitle:@"Edit Mappings…" target:gDelegate action:@selector(showMappings:)];
+			NSStackView *profileRow = [NSStackView stackViewWithViews:@[profileLabel, gMainProfilePopup, edit]];
+			profileRow.orientation = NSUserInterfaceLayoutOrientationHorizontal;
+			profileRow.alignment = NSLayoutAttributeFirstBaseline;
+			profileRow.spacing = 8;
+			[views addObjectsFromArray:@[separator, profileRow]];
+		}
+
+		NSStackView *stack = [NSStackView stackViewWithViews:views];
+		stack.orientation = NSUserInterfaceLayoutOrientationVertical;
+		stack.alignment = NSLayoutAttributeCenterX;
+		stack.spacing = 12;
+		stack.edgeInsets = NSEdgeInsetsMake(20, 30, 24, 30);
+		stack.translatesAutoresizingMaskIntoConstraints = NO;
+		[stack setCustomSpacing:4 afterView:headline];
+		[stack setCustomSpacing:18 afterView:gStatusDetail];
+		[stack setCustomSpacing:18 afterView:gPermissionBanner];
+		[stack setCustomSpacing:16 afterView:qrBox];
+		[stack setCustomSpacing:6 afterView:codeRow];
+		[stack setCustomSpacing:18 afterView:gStats];
+		[stack setCustomSpacing:18 afterView:addrField];
+
+		NSView *content = gWindow.contentView;
+		[content addSubview:stack];
+		[NSLayoutConstraint activateConstraints:@[
+			[stack.leadingAnchor constraintEqualToAnchor:content.leadingAnchor],
+			[stack.trailingAnchor constraintEqualToAnchor:content.trailingAnchor],
+			[stack.topAnchor constraintEqualToAnchor:content.topAnchor],
+			[stack.bottomAnchor constraintEqualToAnchor:content.bottomAnchor],
+		]];
+		[content layoutSubtreeIfNeeded];
+		[gWindow setContentSize:stack.fittingSize];
+		[gWindow center];
+
+		if (gKeyboardMode) {
+			PPShowProfile(PPCurrentProfile());
+		}
 		[gWindow makeKeyAndOrderFront:nil];
 		[app activateIgnoringOtherApps:YES];
 		[app run];
@@ -311,73 +467,96 @@ void pp_app_launch(const char *title, const char *code, const char *address,
 }
 
 // ---------------------------------------------------------------------------
-// Mapping editor: dropdowns grouped in sections, no file editing required.
+// Mapping editor
 // ---------------------------------------------------------------------------
 
-static NSArray *gActionTitles = nil;
+/** Display names for mapping actions; values are the mapping file's names. */
+static NSString *PPActionTitle(NSString *value) {
+	static NSDictionary *names = nil;
+	if (names == nil) {
+		names = @{
+			@"none": @"None", @"mouseLeft": @"Left Click", @"mouseRight": @"Right Click",
+			@"wheelUp": @"Scroll Up", @"wheelDown": @"Scroll Down",
+			@"space": @"Space", @"enter": @"Return", @"esc": @"Escape", @"tab": @"Tab",
+			@"shift": @"Shift", @"ctrl": @"Control", @"alt": @"Option", @"cmd": @"Command",
+			@"up": @"Up Arrow", @"down": @"Down Arrow", @"left": @"Left Arrow", @"right": @"Right Arrow",
+			@"home": @"Home", @"end": @"End", @"pageup": @"Page Up", @"pagedown": @"Page Down",
+			@"delete": @"Delete", @"forwarddelete": @"Forward Delete", @"help": @"Help", @"capslock": @"Caps Lock",
+			@"minus": @"-", @"equal": @"=", @"comma": @",", @"period": @".", @"slash": @"/",
+			@"backslash": @"\\", @"semicolon": @";", @"quote": @"'", @"grave": @"`",
+			@"lbracket": @"[", @"rbracket": @"]",
+		};
+	}
+	NSString *name = names[value];
+	if (name != nil) {
+		return name;
+	}
+	if (value.length == 1 || [value hasPrefix:@"f"]) {
+		return value.uppercaseString; // letters, digits, F1-F20
+	}
+	return value;
+}
 
-static NSArray *PPActionTitles(void) {
-	if (gActionTitles == nil) {
-		NSMutableArray *t = [NSMutableArray arrayWithObjects:
+static NSArray *PPActionValues(void) {
+	static NSMutableArray *values = nil;
+	if (values == nil) {
+		values = [NSMutableArray arrayWithObjects:
 			@"none", @"mouseLeft", @"mouseRight", @"wheelUp", @"wheelDown",
 			@"space", @"enter", @"esc", @"tab", @"shift", @"ctrl", @"alt", @"cmd",
 			@"up", @"down", @"left", @"right",
 			@"home", @"end", @"pageup", @"pagedown",
 			@"delete", @"forwarddelete", @"help", @"capslock",
 			@"minus", @"equal", @"comma", @"period", @"slash", @"backslash",
-			@"semicolon", @"quote", @"grave", @"lbracket", @"rbracket",
-			nil];
+			@"semicolon", @"quote", @"grave", @"lbracket", @"rbracket", nil];
 		for (char c = 'a'; c <= 'z'; c++) {
-			[t addObject:[NSString stringWithFormat:@"%c", c]];
+			[values addObject:[NSString stringWithFormat:@"%c", c]];
 		}
 		for (char c = '0'; c <= '9'; c++) {
-			[t addObject:[NSString stringWithFormat:@"%c", c]];
+			[values addObject:[NSString stringWithFormat:@"%c", c]];
 		}
 		for (int i = 1; i <= 20; i++) {
-			[t addObject:[NSString stringWithFormat:@"f%d", i]];
+			[values addObject:[NSString stringWithFormat:@"f%d", i]];
 		}
-		gActionTitles = t;
 	}
-	return gActionTitles;
+	return values;
 }
 
-static NSPopUpButton *PPMakeActionPopup(NSString *value) {
-	NSPopUpButton *popup = [[NSPopUpButton alloc] initWithFrame:NSMakeRect(0, 0, 190, 26) pullsDown:NO];
-	[popup addItemsWithTitles:PPActionTitles()];
-	if (value.length > 0 && [popup itemWithTitle:value] == nil) {
-		// Keep exotic names (kp3, f13...) that came from a hand-edited file.
-		[popup addItemWithTitle:value];
+static NSPopUpButton *PPMakeActionPopup(NSRect frame) {
+	NSPopUpButton *popup = [[NSPopUpButton alloc] initWithFrame:frame pullsDown:NO];
+	for (NSString *value in PPActionValues()) {
+		PPAddItem(popup, PPActionTitle(value), value);
 	}
-	[popup selectItemWithTitle:(value.length > 0 ? value : @"none")];
 	return popup;
 }
 
 static void PPEditorStatus(NSString *text) {
-	gEditorStatus.stringValue = text ? text : @"";
+	if (gEditorStatus != nil) {
+		gEditorStatus.stringValue = text ?: @"";
+	}
 }
 
 /** The mapping rows, grouped into editor sections. */
 static NSArray *PPSections(void) {
 	return @[
-		@{@"title": @"BUTTONS", @"rows": @[
+		@{@"title": @"Buttons", @"rows": @[
 			@[@"buttons.A", @"A"], @[@"buttons.B", @"B"], @[@"buttons.X", @"X"], @[@"buttons.Y", @"Y"],
 			@[@"buttons.LB", @"LB"], @[@"buttons.RB", @"RB"],
 			@[@"buttons.Back", @"Back"], @[@"buttons.Start", @"Start"], @[@"buttons.Guide", @"Guide"],
-			@[@"buttons.LS", @"LS click"], @[@"buttons.RS", @"RS click"],
+			@[@"buttons.LS", @"Left stick click"], @[@"buttons.RS", @"Right stick click"],
 		]},
-		@{@"title": @"D-PAD", @"rows": @[
+		@{@"title": @"D-pad", @"rows": @[
 			@[@"dpad.up", @"Up"], @[@"dpad.down", @"Down"],
 			@[@"dpad.left", @"Left"], @[@"dpad.right", @"Right"],
 		]},
-		@{@"title": @"LEFT STICK", @"rows": @[
+		@{@"title": @"Left stick", @"rows": @[
 			@[@"leftStick.up", @"Up"], @[@"leftStick.down", @"Down"],
 			@[@"leftStick.left", @"Left"], @[@"leftStick.right", @"Right"],
 		]},
-		@{@"title": @"TRIGGERS", @"rows": @[
+		@{@"title": @"Triggers", @"rows": @[
 			@[@"leftTrigger", @"LT"], @[@"rightTrigger", @"RT"],
 		]},
-		@{@"title": @"RIGHT STICK", @"rows": @[
-			@[@"rightStick.mode", @"Behaviour"],
+		@{@"title": @"Right stick", @"rows": @[
+			@[@"rightStick.mode", @"Behavior"],
 			@[@"rightStick.up", @"Up (keys mode)"], @[@"rightStick.down", @"Down (keys mode)"],
 			@[@"rightStick.left", @"Left (keys mode)"], @[@"rightStick.right", @"Right (keys mode)"],
 		]},
@@ -387,130 +566,145 @@ static NSArray *PPSections(void) {
 void pp_app_show_editor(const char *json) {
 	@autoreleasepool {
 		NSString *text = [NSString stringWithUTF8String:(json != NULL ? json : "{}")];
-		NSData *data = [text dataUsingEncoding:NSUTF8StringEncoding];
-		id parsed = [NSJSONSerialization JSONObjectWithData:data options:0 error:NULL];
+		id parsed = [NSJSONSerialization JSONObjectWithData:[text dataUsingEncoding:NSUTF8StringEncoding] options:0 error:NULL];
 		gJSON = [parsed isKindOfClass:[NSDictionary class]] ? parsed : @{};
 		if (json != NULL) {
 			free((void *)json);
 		}
 
-		CGFloat W = 560;
-		CGFloat H = 640;
-		CGFloat (^topY)(CGFloat, CGFloat) = ^CGFloat(CGFloat top, CGFloat h) { return H - top - h; };
+		const CGFloat W = 520;
+		const CGFloat H = 620;
+		const CGFloat rowH = 30;
+		const CGFloat headerH = 30;
+		const CGFloat popupW = 180;
 
 		if (gEditorWindow == nil) {
-			NSWindowStyleMask style = NSWindowStyleMaskTitled | NSWindowStyleMaskClosable | NSWindowStyleMaskResizable;
-			gEditorWindow = [[NSWindow alloc] initWithContentRect:NSMakeRect(0, 0, W, H) styleMask:style backing:NSBackingStoreBuffered defer:NO];
-			gEditorWindow.title = @"PocketPad — Mappings";
+			gEditorWindow = [[NSWindow alloc] initWithContentRect:NSMakeRect(0, 0, W, H)
+			                                            styleMask:NSWindowStyleMaskTitled | NSWindowStyleMaskClosable | NSWindowStyleMaskResizable
+			                                              backing:NSBackingStoreBuffered
+			                                                defer:NO];
+			gEditorWindow.title = @"Mappings";
+			gEditorWindow.subtitle = @"Keyboard and mouse";
 			gEditorWindow.releasedWhenClosed = NO;
-			gEditorWindow.backgroundColor = PPBackground();
-			gEditorWindow.titlebarAppearsTransparent = YES;
-			gEditorWindow.appearance = [NSAppearance appearanceNamed:NSAppearanceNameDarkAqua];
-			gEditorWindow.minSize = NSMakeSize(520, 480);
+			gEditorWindow.minSize = NSMakeSize(480, 420);
 			[gEditorWindow center];
 			NSView *content = gEditorWindow.contentView;
 
-			NSTextField *heading = [NSTextField labelWithString:@"Mappings"];
-			heading.font = [NSFont boldSystemFontOfSize:18];
-			heading.frame = NSMakeRect(24, topY(24, 24), 200, 24);
-			[content addSubview:heading];
-
-			NSTextField *profileLabel = PPLabel(NSZeroRect, @"Profile", 12, [NSColor secondaryLabelColor]);
-			profileLabel.frame = NSMakeRect(W - 24 - 190 - 60, topY(28, 18), 54, 18);
+			// Top: profile menu and explanation.
+			NSTextField *profileLabel = PPText(@"Profile:", [NSFont systemFontOfSize:13], [NSColor labelColor]);
+			gEditorProfilePopup = PPMakeProfilePopup();
+			gEditorProfilePopup.target = gDelegate;
+			gEditorProfilePopup.action = @selector(profileChanged:);
+			gEditorProfilePopup.translatesAutoresizingMaskIntoConstraints = NO;
+			NSTextField *hint = [NSTextField wrappingLabelWithString:@"Choose a key for each control. Save stores the result as the Custom profile and applies it immediately."];
+			hint.font = [NSFont systemFontOfSize:12];
+			hint.textColor = [NSColor secondaryLabelColor];
+			hint.translatesAutoresizingMaskIntoConstraints = NO;
 			[content addSubview:profileLabel];
-
-			gProfilePopup = [[NSPopUpButton alloc] initWithFrame:NSMakeRect(W - 24 - 190, topY(24, 28), 190, 28) pullsDown:NO];
-			[gProfilePopup addItemsWithTitles:@[@"general", @"racing", @"gta", @"custom"]];
-			gProfilePopup.target = gDelegate;
-			gProfilePopup.action = @selector(profileChanged:);
-			[content addSubview:gProfilePopup];
-
-			NSTextField *hint = PPLabel(NSZeroRect, @"The rows below edit the \"custom\" mapping; Save switches to it and applies it live.", 11, [NSColor secondaryLabelColor]);
-			hint.frame = NSMakeRect(24, topY(56, 16), W - 48, 16);
+			[content addSubview:gEditorProfilePopup];
 			[content addSubview:hint];
 
-			NSTextField *sectionHeading = PPCaption(NSZeroRect, @"CONTROLS");
-			sectionHeading.frame = NSMakeRect(24, topY(84, 14), 200, 14);
-			[content addSubview:sectionHeading];
-
-			NSScrollView *scroll = [[NSScrollView alloc] initWithFrame:NSMakeRect(18, 64, W - 36, H - 64 - 100)];
+			// Middle: scrolling list of grouped rows.
+			NSScrollView *scroll = [[NSScrollView alloc] init];
 			scroll.hasVerticalScroller = YES;
 			scroll.borderType = NSNoBorder;
 			scroll.drawsBackground = NO;
-			scroll.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+			scroll.translatesAutoresizingMaskIntoConstraints = NO;
+			[content addSubview:scroll];
 
-			CGFloat docWidth = W - 36 - 2;
 			NSArray *sections = PPSections();
-			CGFloat docHeight = 8;
+			CGFloat docWidth = W - 40;
+			CGFloat docHeight = 0;
 			for (NSDictionary *section in sections) {
-				docHeight += 34 + [(NSArray *)section[@"rows"] count] * 30 + 12;
+				docHeight += headerH + [(NSArray *)section[@"rows"] count] * rowH + 12 + 16;
 			}
-
-			NSView *doc = [[PPFlippedView alloc] initWithFrame:NSMakeRect(0, 0, docWidth, docHeight)];
-			[scroll setDocumentView:doc];
+			PPFlippedView *doc = [[PPFlippedView alloc] initWithFrame:NSMakeRect(0, 0, docWidth, docHeight)];
+			doc.autoresizingMask = NSViewWidthSizable;
+			scroll.documentView = doc;
 
 			gRowKeys = [NSMutableArray array];
 			gRowPopups = [NSMutableArray array];
-
-			CGFloat top = 8;
+			CGFloat top = 0;
 			for (NSDictionary *section in sections) {
 				NSArray *rows = section[@"rows"];
-				CGFloat cardHeight = 34 + rows.count * 30 + 6;
-				NSView *card = PPCard(NSMakeRect(0, top, docWidth, cardHeight), PPElevated(), 12);
-				[doc addSubview:card];
+				NSTextField *title = PPText(section[@"title"], [NSFont systemFontOfSize:13 weight:NSFontWeightSemibold], [NSColor labelColor]);
+				title.translatesAutoresizingMaskIntoConstraints = YES;
+				title.frame = NSMakeRect(4, top + 6, 300, 18);
+				[doc addSubview:title];
 
-				NSTextField *title = PPCaption(NSZeroRect, section[@"title"]);
-				title.frame = NSMakeRect(16, cardHeight - 14 - 12, 200, 14);
-				[card addSubview:title];
+				CGFloat groupH = rows.count * rowH + 12;
+				NSBox *group = PPGroup();
+				group.frame = NSMakeRect(0, top + headerH, docWidth, groupH);
+				group.autoresizingMask = NSViewWidthSizable;
+				[doc addSubview:group];
 
+				// NSBox's content view uses bottom-up coordinates.
 				NSUInteger i = 0;
 				for (NSArray *row in rows) {
-					NSString *key = row[0];
-					NSTextField *label = PPLabel(NSZeroRect, row[1], 12, [NSColor labelColor]);
-					label.frame = NSMakeRect(16, cardHeight - 34 - (i + 1) * 30 + 6, 200, 18);
-					[card addSubview:label];
+					CGFloat y = groupH - 6 - (i + 1) * rowH;
+					NSTextField *label = PPText(row[1], [NSFont systemFontOfSize:13], [NSColor labelColor]);
+					label.translatesAutoresizingMaskIntoConstraints = YES;
+					label.frame = NSMakeRect(14, y + 6, 220, 18);
+					[group.contentView addSubview:label];
 
+					NSRect popupFrame = NSMakeRect(docWidth - 14 - popupW, y + 2, popupW, 26);
 					NSPopUpButton *popup;
+					NSString *key = row[0];
 					if ([key isEqualToString:@"rightStick.mode"]) {
-						popup = [[NSPopUpButton alloc] initWithFrame:NSMakeRect(docWidth - 16 - 190, label.frame.origin.y - 4, 190, 26) pullsDown:NO];
-						[popup addItemsWithTitles:@[@"Mouse look", @"Keys"]];
+						popup = [[NSPopUpButton alloc] initWithFrame:popupFrame pullsDown:NO];
+						PPAddItem(popup, @"Mouse look", @"mouse");
+						PPAddItem(popup, @"Keys", @"keys");
 					} else {
-						popup = PPMakeActionPopup(nil);
-						[popup setFrame:NSMakeRect(docWidth - 16 - 190, label.frame.origin.y - 4, 190, 26)];
+						popup = PPMakeActionPopup(popupFrame);
 					}
-					[card addSubview:popup];
+					popup.autoresizingMask = NSViewMinXMargin;
+					[group.contentView addSubview:popup];
 					[gRowKeys addObject:key];
 					[gRowPopups addObject:popup];
 					i++;
 				}
-				top += cardHeight + 12;
+				top += headerH + groupH + 16;
 			}
 
-			[content addSubview:scroll];
-
-			gEditorStatus = PPLabel(NSZeroRect, @"", 11, [NSColor secondaryLabelColor]);
-			gEditorStatus.frame = NSMakeRect(24, topY(H - 36, 16), W - 48 - 330, 16);
+			// Bottom: status and buttons (Revert on the left, Save as default).
+			gEditorStatus = PPText(@"", [NSFont systemFontOfSize:12], [NSColor secondaryLabelColor]);
+			gEditorStatus.lineBreakMode = NSLineBreakByTruncatingTail;
+			[gEditorStatus setContentCompressionResistancePriority:NSLayoutPriorityDefaultLow forOrientation:NSLayoutConstraintOrientationHorizontal];
+			NSButton *revert = [NSButton buttonWithTitle:@"Revert" target:gDelegate action:@selector(revertMapping:)];
+			NSButton *close = [NSButton buttonWithTitle:@"Close" target:gDelegate action:@selector(closeEditor:)];
+			close.keyEquivalent = @"\e";
+			NSButton *save = [NSButton buttonWithTitle:@"Save" target:gDelegate action:@selector(saveMapping:)];
+			save.keyEquivalent = @"\r";
+			for (NSView *v in @[revert, close, save]) {
+				v.translatesAutoresizingMaskIntoConstraints = NO;
+				[content addSubview:v];
+			}
 			[content addSubview:gEditorStatus];
 
-			CGFloat buttonY = topY(H - 44, 32);
-			NSButton *closeButton = [NSButton buttonWithTitle:@"Close" target:gDelegate action:@selector(closeEditor:)];
-			closeButton.frame = NSMakeRect(W - 24 - 90, buttonY, 90, 32);
-			closeButton.autoresizingMask = NSViewMinXMargin;
-			[content addSubview:closeButton];
+			[NSLayoutConstraint activateConstraints:@[
+				[profileLabel.leadingAnchor constraintEqualToAnchor:content.leadingAnchor constant:20],
+				[gEditorProfilePopup.leadingAnchor constraintEqualToAnchor:profileLabel.trailingAnchor constant:8],
+				[gEditorProfilePopup.topAnchor constraintEqualToAnchor:content.topAnchor constant:16],
+				[profileLabel.firstBaselineAnchor constraintEqualToAnchor:gEditorProfilePopup.firstBaselineAnchor],
+				[hint.leadingAnchor constraintEqualToAnchor:content.leadingAnchor constant:20],
+				[hint.trailingAnchor constraintEqualToAnchor:content.trailingAnchor constant:-20],
+				[hint.topAnchor constraintEqualToAnchor:gEditorProfilePopup.bottomAnchor constant:10],
 
-			NSButton *reload = [NSButton buttonWithTitle:@"Revert" target:gDelegate action:@selector(reloadMapping:)];
-			reload.frame = NSMakeRect(W - 24 - 90 - 8 - 90, buttonY, 90, 32);
-			reload.autoresizingMask = NSViewMinXMargin;
-			[content addSubview:reload];
+				[scroll.leadingAnchor constraintEqualToAnchor:content.leadingAnchor constant:20],
+				[scroll.trailingAnchor constraintEqualToAnchor:content.trailingAnchor constant:-20],
+				[scroll.topAnchor constraintEqualToAnchor:hint.bottomAnchor constant:14],
+				[scroll.bottomAnchor constraintEqualToAnchor:save.topAnchor constant:-16],
 
-			NSButton *save = [NSButton buttonWithTitle:@"Save & use" target:gDelegate action:@selector(saveMapping:)];
-			save.bezelStyle = NSBezelStyleRounded;
-			save.bezelColor = PPAccent();
-			save.contentTintColor = [NSColor whiteColor];
-			save.frame = NSMakeRect(W - 24 - 90 - 8 - 90 - 8 - 116, buttonY, 116, 32);
-			save.autoresizingMask = NSViewMinXMargin;
-			[save setKeyEquivalent:@"\r"];
-			[content addSubview:save];
+				[save.trailingAnchor constraintEqualToAnchor:content.trailingAnchor constant:-20],
+				[save.bottomAnchor constraintEqualToAnchor:content.bottomAnchor constant:-16],
+				[close.trailingAnchor constraintEqualToAnchor:save.leadingAnchor constant:-8],
+				[close.firstBaselineAnchor constraintEqualToAnchor:save.firstBaselineAnchor],
+				[revert.leadingAnchor constraintEqualToAnchor:content.leadingAnchor constant:20],
+				[revert.firstBaselineAnchor constraintEqualToAnchor:save.firstBaselineAnchor],
+				[gEditorStatus.leadingAnchor constraintEqualToAnchor:revert.trailingAnchor constant:12],
+				[gEditorStatus.trailingAnchor constraintLessThanOrEqualToAnchor:close.leadingAnchor constant:-12],
+				[gEditorStatus.firstBaselineAnchor constraintEqualToAnchor:save.firstBaselineAnchor],
+			]];
 		}
 
 		PPFillRowsFromJSON();
@@ -523,55 +717,46 @@ static void PPFillRowsFromJSON(void) {
 	NSDictionary *buttons = gJSON[@"buttons"];
 	NSDictionary *dpad = gJSON[@"dpad"];
 	NSDictionary *leftStick = gJSON[@"leftStick"];
-	NSDictionary *rightStick = gJSON[@"rightStick"];
+	id rightStick = gJSON[@"rightStick"];
 
 	for (NSUInteger i = 0; i < gRowKeys.count; i++) {
 		NSString *key = gRowKeys[i];
 		NSPopUpButton *popup = gRowPopups[i];
 
 		if ([key isEqualToString:@"rightStick.mode"]) {
-			BOOL mouse = YES;
-			if ([rightStick isKindOfClass:[NSString class]]) {
-				mouse = ![(NSString *)rightStick isEqualToString:@"none"];
-			} else if ([rightStick isKindOfClass:[NSDictionary class]]) {
-				mouse = NO;
-			}
-			[popup selectItemAtIndex:(mouse ? 0 : 1)];
+			// "mouse" (or absent) is mouse look; an object of keys, or "none"
+			// in a hand-written file, is keys mode.
+			BOOL keys = [rightStick isKindOfClass:[NSDictionary class]] ||
+			            ([rightStick isKindOfClass:[NSString class]] && [(NSString *)rightStick caseInsensitiveCompare:@"none"] == NSOrderedSame);
+			PPSelectValue(popup, keys ? @"keys" : @"mouse");
 			continue;
 		}
 
-		NSString *value = nil;
-		if ([key isEqualToString:@"leftTrigger"]) {
-			value = gJSON[@"leftTrigger"];
-		} else if ([key isEqualToString:@"rightTrigger"]) {
-			value = gJSON[@"rightTrigger"];
+		id value = nil;
+		if ([key isEqualToString:@"leftTrigger"] || [key isEqualToString:@"rightTrigger"]) {
+			value = gJSON[key];
 		} else {
 			NSArray *parts = [key componentsSeparatedByString:@"."];
 			NSString *group = parts[0];
 			NSString *name = parts[1];
-			if ([group isEqualToString:@"buttons"]) {
+			if ([group isEqualToString:@"buttons"] && [buttons isKindOfClass:[NSDictionary class]]) {
 				value = buttons[name];
-			} else if ([group isEqualToString:@"dpad"]) {
+			} else if ([group isEqualToString:@"dpad"] && [dpad isKindOfClass:[NSDictionary class]]) {
 				value = dpad[name];
-			} else if ([group isEqualToString:@"leftStick"]) {
+			} else if ([group isEqualToString:@"leftStick"] && [leftStick isKindOfClass:[NSDictionary class]]) {
 				value = leftStick[name];
 			} else if ([group isEqualToString:@"rightStick"] && [rightStick isKindOfClass:[NSDictionary class]]) {
 				value = rightStick[name];
 			}
 		}
 		NSString *v = [value isKindOfClass:[NSString class]] ? value : @"none";
-		if (![v isEqualToString:@"none"] && [popup itemWithTitle:v] == nil) {
-			[popup addItemWithTitle:v];
+		if (!PPSelectValue(popup, v)) {
+			// Keep names from a hand-edited file (kp3, f13...) selectable.
+			PPAddItem(popup, PPActionTitle(v), v);
+			PPSelectValue(popup, v);
 		}
-		[popup selectItemWithTitle:v];
 	}
-
-	char *currentProfile = ppGoCurrentProfileName();
-	NSString *profileName = [NSString stringWithUTF8String:(currentProfile != NULL ? currentProfile : "general")];
-	if (currentProfile != NULL) {
-		free((void *)currentProfile);
-	}
-	[gProfilePopup selectItemWithTitle:profileName];
+	PPShowProfile(PPCurrentProfile());
 	PPEditorStatus(nil);
 }
 
@@ -581,18 +766,23 @@ static NSDictionary *PPBuildDoc(void) {
 	NSMutableDictionary *leftStick = [NSMutableDictionary dictionary];
 	NSMutableDictionary *rightStick = [NSMutableDictionary dictionary];
 	BOOL rightStickKeys = NO;
+	NSString *leftTrigger = @"none";
+	NSString *rightTrigger = @"none";
 
 	for (NSUInteger i = 0; i < gRowKeys.count; i++) {
 		NSString *key = gRowKeys[i];
-		NSPopUpButton *popup = gRowPopups[i];
-		NSString *value = popup.titleOfSelectedItem ?: @"none";
-
+		NSString *value = PPSelectedValue(gRowPopups[i]);
 		if ([key isEqualToString:@"rightStick.mode"]) {
-			rightStickKeys = (popup.indexOfSelectedItem == 1);
+			rightStickKeys = [value isEqualToString:@"keys"];
 			continue;
 		}
-		if ([key isEqualToString:@"leftTrigger"] || [key isEqualToString:@"rightTrigger"]) {
-			continue; // handled below
+		if ([key isEqualToString:@"leftTrigger"]) {
+			leftTrigger = value;
+			continue;
+		}
+		if ([key isEqualToString:@"rightTrigger"]) {
+			rightTrigger = value;
+			continue;
 		}
 		NSArray *parts = [key componentsSeparatedByString:@"."];
 		NSString *group = parts[0];
@@ -610,13 +800,13 @@ static NSDictionary *PPBuildDoc(void) {
 		}
 	}
 
-	NSMutableDictionary *doc = [NSMutableDictionary dictionary];
-	doc[@"name"] = @"custom";
-	doc[@"buttons"] = buttons;
-	doc[@"dpad"] = dpad;
-	doc[@"leftStick"] = leftStick;
-	doc[@"rightStick"] = rightStickKeys ? rightStick : @"mouse";
-	doc[@"leftTrigger"] = ((NSPopUpButton *)gRowPopups[[gRowKeys indexOfObject:@"leftTrigger"]]).titleOfSelectedItem ?: @"none";
-	doc[@"rightTrigger"] = ((NSPopUpButton *)gRowPopups[[gRowKeys indexOfObject:@"rightTrigger"]]).titleOfSelectedItem ?: @"none";
-	return doc;
+	return @{
+		@"name": @"custom",
+		@"buttons": buttons,
+		@"dpad": dpad,
+		@"leftStick": leftStick,
+		@"rightStick": rightStickKeys ? rightStick : @"mouse",
+		@"leftTrigger": leftTrigger,
+		@"rightTrigger": rightTrigger,
+	};
 }
