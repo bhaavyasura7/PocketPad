@@ -101,7 +101,7 @@ class VectorsTest {
         val h = v.getJSONObject("handshake")
         val pairKey = hex(v.getJSONObject("pairing").getString("pairKeyHex"))
         val cn = hex(h.getString("clientNonceHex"))
-        val deviceId = h.getString("deviceId").toULong().toLong()
+        val deviceId = h.getBigDecimal("deviceId").toBigInteger().toLong() // uint64 in JSON
 
         // HELLO: our encoding and tag match byte for byte.
         val hello = ByteArray(Wire.HELLO_SIZE + Wire.HANDSHAKE_TAG_SIZE)
