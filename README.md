@@ -69,7 +69,19 @@ The phone app requires Android 9 (API 28) or later.
 The full walkthrough, including Windows driver setup, macOS permissions and
 troubleshooting, is in [docs/GETTING_STARTED.md](docs/GETTING_STARTED.md).
 
-<img width="1600" height="734" alt="PHOTO-2026-10-13-22-46-06" src="https://github.com/user-attachments/assets/53905039-f2c2-40fc-bd34-6eb7dbf43fe2" />
+## Screenshots
+
+**The controller** — rainbow gaming lights flow around the edges and brighten
+while you play, or pick a solid colour:
+
+<img src="docs/screenshots/controller.png" alt="PocketPad controller with rainbow gaming lights" width="820">
+
+<img src="docs/screenshots/controller-active.png" alt="Lights brighten while playing" width="404"> <img src="docs/screenshots/controller-solid.png" alt="Solid colour gaming lights" width="404">
+
+**Set up in seconds** — scan the pairing QR code, learn every mapping in the
+app, and tune the lights and the controls:
+
+<img src="docs/screenshots/connect.png" alt="Connect screen with QR scanning" width="250"> <img src="docs/screenshots/controls.png" alt="Controls reference" width="250"> <img src="docs/screenshots/settings.png" alt="Settings including gaming lights" width="250">
 
 
 ## Documentation
