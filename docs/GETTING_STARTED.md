@@ -72,12 +72,25 @@ On macOS 26, Apple requires a restricted entitlement
 virtual gamepad, even when run as root. The receiver detects this and
 switches to keyboard and mouse control automatically.
 
-**The Mac app (recommended).** Build the app bundle once, then open it:
+**The Mac app (recommended).**
 
-```sh
-./scripts/build-mac-app.sh
-open dist/PocketPad.app
-```
+1. Once per Mac, create a local signing identity:
+
+   ```sh
+   ./scripts/make-signing-cert.sh
+   ```
+
+   This creates a self-signed "PocketPad Dev" certificate, and the build
+   script signs every build with it. macOS ties the Accessibility permission
+   to the app's signature, so with a stable identity the permission survives
+   rebuilds. Without it, every rebuild needs the permission granted again.
+
+2. Build the app and open it:
+
+   ```sh
+   ./scripts/build-mac-app.sh
+   open dist/PocketPad.app
+   ```
 
 A window shows a QR code for pairing, the pairing code and the connection
 status. To pass options, use `--args`:
@@ -85,12 +98,6 @@ status. To pass options, use `--args`:
 ```sh
 open dist/PocketPad.app --args -profile racing
 ```
-
-Run **`scripts/make-signing-cert.sh` once**: it creates a local
-"PocketPad Dev" signing identity, and the build script signs every build
-with it. The Accessibility grant is tied to the app's signature, so a
-stable identity keeps the permission across every rebuild; without it, each
-update needs a fresh grant.
 
 **Accessibility permission (macOS 26).** Keyboard and mouse control needs
 permission once. When macOS asks, or in System Settings > Privacy & Security

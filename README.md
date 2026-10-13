@@ -86,7 +86,7 @@ desktop/               Receiver (Go)
   internal/            Protocol, session manager, gamepad backends, configuration
 docs/                  Documentation
 protocol/testvectors/  Test vectors shared by the Go and Kotlin implementations
-scripts/               Build helpers (macOS app bundle)
+scripts/               macOS app bundle and signing helpers
 ```
 
 ## Security
