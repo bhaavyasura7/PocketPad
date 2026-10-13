@@ -341,6 +341,9 @@ repository's Releases page.
    git push origin v0.1.0
    ```
 
+   Or, without a local tag: open Actions > Release > Run workflow, choose the
+   branch and enter the tag. The release creates the tag on that commit.
+
 The workflow then builds:
 
 | Package | Contents |
