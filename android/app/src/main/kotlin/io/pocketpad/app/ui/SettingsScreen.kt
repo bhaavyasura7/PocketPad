@@ -104,7 +104,7 @@ fun SettingsScreen(vm: AppViewModel) {
 
         SettingSwitch(
             label = stringResource(R.string.setting_haptic),
-            summary = null,
+            summary = stringResource(R.string.setting_haptic_summary),
             checked = haptic,
         ) {
             haptic = it

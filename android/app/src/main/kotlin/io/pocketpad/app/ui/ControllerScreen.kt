@@ -53,6 +53,7 @@ import io.pocketpad.app.R
 import io.pocketpad.app.core.BluetoothHidTransport
 import io.pocketpad.app.core.ControllerView
 import io.pocketpad.app.core.ErrorKind
+import io.pocketpad.app.core.Haptics
 import io.pocketpad.app.core.Stats
 import io.pocketpad.app.core.Transport
 import io.pocketpad.app.core.TransportStatus
@@ -124,15 +125,18 @@ fun ControllerScreen(vm: AppViewModel) {
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background),
     ) {
+        val haptics = remember(context) { Haptics(context) { vm.prefs.haptic } }
         AndroidView(
             factory = { ctx ->
                 ControllerView(ctx).apply {
                     input = vm.input
+                    this.haptics = haptics
                     settingsProvider = { vm.uiSettings() }
                 }
             },
             update = { v ->
                 v.input = vm.input
+                v.haptics = haptics
                 v.applySettings(vm.uiSettings())
             },
             modifier = Modifier.fillMaxSize(),

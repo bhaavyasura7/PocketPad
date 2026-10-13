@@ -71,7 +71,8 @@
     <string name="setting_trigger_analog_summary">Off: a touch is always a full press.</string>
     <string name="setting_rate">Updates per second</string>
     <string name="setting_rate_value">%1$d Hz</string>
-    <string name="setting_haptic">Haptic tick on buttons</string>
+    <string name="setting_haptic">Haptic feedback</string>
+    <string name="setting_haptic_summary">Crisp click on buttons, light tick on d-pad turns and trigger presses.</string>
     <string name="setting_rumble">Vibrate on rumble</string>
     <string name="setting_scale">Layout size</string>
     <string name="setting_scale_value">%1$d%%</string>

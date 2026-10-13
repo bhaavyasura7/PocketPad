@@ -123,7 +123,7 @@ func init() {
 }
 
 // mouseSpeedPxPerSecond is the pointer speed at full right-stick deflection.
-const mouseSpeedPxPerSecond = 900
+const mouseSpeedPxPerSecond = 700
 
 // macKeys drives the Mac with synthetic keyboard and mouse events. It needs
 // the user's Accessibility approval; until it is granted the backend stays
