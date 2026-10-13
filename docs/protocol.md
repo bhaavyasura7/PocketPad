@@ -155,7 +155,9 @@ monotonic clock, wrapping) · echo µs u32 (the peer's last time value, or 0) ·
 RTT µs u32 (the sender's latest measurement, or 0) · battery u8 (0–100, 255
 unknown) · flags u8 (bit 0 charging). The phone sends one every heartbeat
 interval; the receiver echoes each one immediately. The phone computes
-`RTT = now − echo` on its own clock. Times from different devices are never
+`RTT = now − echo` on its own clock. A time value of 0 means "none", so
+senders must never put 0 in the time field (set the lowest bit: `t | 1`), and
+a measured RTT of 0 is reported as 1. Times from different devices are never
 compared with each other.
 
 **DISCONNECT** body (8 bytes): header · reason u8 (0 user, 1 shutdown,

@@ -146,7 +146,10 @@ func (c *Client) handshake(ctx context.Context, pairKey []byte) error {
 	return ErrNoAnswer
 }
 
-func (c *Client) nowUs() uint32 { return uint32(time.Since(c.start).Microseconds()) }
+// nowUs is this side's clock for heartbeats. It never returns 0, which means
+// "no timestamp" on the wire; coarse clocks (Windows ticks every 0.5–15.6ms)
+// would otherwise produce 0 right after connecting.
+func (c *Client) nowUs() uint32 { return uint32(time.Since(c.start).Microseconds()) | 1 }
 
 func (c *Client) send(bodyLen int, put func(b []byte, seq uint16)) error {
 	c.mu.Lock()
@@ -215,7 +218,8 @@ func (c *Client) readLoop() {
 			}
 			c.echoUs.Store(hb.TimeUs)
 			if hb.EchoUs != 0 {
-				c.rttUs.Store(c.nowUs() - hb.EchoUs)
+				// A coarse clock can measure 0; keep 0 meaning "unknown".
+				c.rttUs.Store(max(c.nowUs()-hb.EchoUs, 1))
 			}
 		case protocol.TypeRumble:
 			if r, err := protocol.DecodeRumble(b); err == nil && c.opts.OnRumble != nil {

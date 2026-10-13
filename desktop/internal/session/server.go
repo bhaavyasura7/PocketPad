@@ -278,7 +278,8 @@ func (s *Server) shutdown() {
 	s.conn.Close()
 }
 
-func (s *Server) nowUs() uint32 { return uint32(time.Since(s.start).Microseconds()) }
+// nowUs never returns 0, which means "no timestamp" on the wire.
+func (s *Server) nowUs() uint32 { return uint32(time.Since(s.start).Microseconds()) | 1 }
 
 // handle processes one datagram. now is when it was read.
 func (s *Server) handle(pkt []byte, from netip.AddrPort, now time.Time) {
