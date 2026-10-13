@@ -20,7 +20,7 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: desktop/go.mod
-          cache: false # no third-party dependencies
+          cache: true
       - name: Format
         if: runner.os == 'Linux'
         run: test -z "$(gofmt -l .)" || (gofmt -l . && exit 1)
@@ -68,8 +68,15 @@ jobs:
           distribution: temurin
           java-version: 17
       - uses: android-actions/setup-android@v3
+        with:
+          # The action's default package list still asks for the legacy "tools"
+          # package, which Google removed from the SDK repository; install what
+          # we need explicitly instead.
+          packages: ''
       - name: Install SDK packages
-        run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
+        run: |
+          yes | sdkmanager --licenses > /dev/null || true
+          sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0"
       - run: ./gradlew :app:assembleDebug :app:testDebugUnitTest :app:lintDebug --no-daemon
       - uses: actions/upload-artifact@v4
         with:
