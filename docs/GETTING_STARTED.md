@@ -20,18 +20,19 @@ phone as the controller.
 
 - An Android phone running Android 9 or later.
 - A Windows or macOS computer on the **same Wi-Fi network** as the phone.
-- To build from source: [Go](https://go.dev/dl/) 1.24 or later for the
-  receiver, and JDK 17 with the Android SDK (platform 35) for the app. CI
-  also publishes ready-made builds; see below.
+- Only to build from source: [Go](https://go.dev/dl/) 1.24 or later for
+  the receiver, and JDK 17 with the Android SDK (platform 35) for the app.
+  Ready-made builds are on the Releases page.
 
 ## Set up the computer
 
 The receiver is a single program, `pocketpad`. It listens on UDP port 47770,
 so allow it through the firewall when the operating system asks.
 
-Ready-made receiver builds for each platform are attached to every CI run on
-GitHub (artifacts `pocketpad-Windows`, `pocketpad-macOS` and
-`pocketpad-Linux`). To build it yourself:
+Download the package for your system from the
+[Releases page](https://github.com/bhaavyasura7/PocketPad/releases) and
+unzip it. The macOS package also contains `PocketPad.app`. To build the
+receiver yourself instead:
 
 ```sh
 cd desktop
@@ -72,7 +73,11 @@ On macOS 26, Apple requires a restricted entitlement
 virtual gamepad, even when run as root. The receiver detects this and
 switches to keyboard and mouse control automatically.
 
-**The Mac app (recommended).**
+**The Mac app (recommended).** The release package includes
+`PocketPad.app`. It is not notarised, so the first time, right-click it and
+choose Open, or allow it in System Settings > Privacy & Security.
+
+To build the app yourself:
 
 1. Once per Mac, create a local signing identity:
 
@@ -136,8 +141,10 @@ phone, run:
 
 ## Install the phone app
 
-Download the APK from the `pocketpad-android-debug` artifact of the latest CI
-run and install it on the phone, or build and install it over USB:
+Download the APK from the
+[Releases page](https://github.com/bhaavyasura7/PocketPad/releases) and open
+it on the phone to install it (Android asks you to allow installs from your
+browser or file manager the first time). Or build and install it over USB:
 
 ```sh
 cd android

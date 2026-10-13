@@ -12,14 +12,30 @@ android {
         applicationId = "io.pocketpad.app"
         minSdk = 28 // BluetoothHidDevice is API 28
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0"
+        // Release builds pass these from the git tag: -PversionName=0.1.0 -PversionCode=1
+        versionCode = (findProperty("versionCode") as String?)?.toInt() ?: 1
+        versionName = (findProperty("versionName") as String?) ?: "1.0"
+    }
+
+    // Release signing comes from the environment (see docs/DEVELOPMENT.md,
+    // "Releasing"); the keystore itself never lives in the repository.
+    val keystorePath = System.getenv("POCKETPAD_KEYSTORE_FILE")
+    signingConfigs {
+        if (keystorePath != null) {
+            create("release") {
+                storeFile = file(keystorePath)
+                storePassword = System.getenv("POCKETPAD_KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("POCKETPAD_KEY_ALIAS")
+                keyPassword = System.getenv("POCKETPAD_KEY_PASSWORD")
+            }
+        }
     }
 
     buildTypes {
         release {
             isMinifyEnabled = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            if (keystorePath != null) signingConfig = signingConfigs.getByName("release")
         }
     }
 

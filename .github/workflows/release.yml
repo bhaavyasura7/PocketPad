@@ -1,0 +1,147 @@
+name: Release
+
+# Push a tag such as v0.1.0 to build every package and publish a GitHub
+# release. Tags starting with v0. or containing a hyphen are marked as
+# pre-releases. Running the workflow by hand (Actions > Release > Run
+# workflow) builds everything as a dry run without publishing.
+# See docs/DEVELOPMENT.md, "Releasing".
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  desktop:
+    name: Receivers (Windows, Linux)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: desktop/go.mod
+      - name: Build and package
+        run: |
+          set -eu
+          V="$GITHUB_REF_NAME"
+          mkdir -p dist
+          build() {
+            out="dist/pocketpad-$V-$1-$2"
+            mkdir -p "$out"
+            (cd desktop &&
+              CGO_ENABLED=0 GOOS=$1 GOARCH=$2 go build -trimpath \
+                -ldflags "-s -w -X main.version=$V" -o "../$out/pocketpad$3" ./cmd/pocketpad &&
+              CGO_ENABLED=0 GOOS=$1 GOARCH=$2 go build -trimpath \
+                -ldflags "-s -w" -o "../$out/ppsim$3" ./cmd/ppsim)
+            cp LICENSE "$out/"
+            (cd dist && zip -qr "$(basename "$out").zip" "$(basename "$out")")
+          }
+          build windows amd64 .exe
+          build windows arm64 .exe
+          build linux amd64 ""
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-desktop
+          path: dist/*.zip
+
+  macos:
+    name: Receiver and app (macOS)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: desktop/go.mod
+      - name: Build and package
+        env:
+          VERSION: ${{ github.ref_name }}
+          UNIVERSAL: '1'
+        run: |
+          set -eu
+          ./scripts/build-mac-app.sh
+          out="dist/pocketpad-$VERSION-macos"
+          mkdir -p "$out"
+          cp -R dist/PocketPad.app "$out/"
+          cp dist/PocketPad.app/Contents/MacOS/pocketpad "$out/pocketpad"
+          (cd desktop &&
+            CGO_ENABLED=0 GOARCH=arm64 go build -trimpath -ldflags "-s -w" -o ../dist/ppsim-arm64 ./cmd/ppsim &&
+            CGO_ENABLED=0 GOARCH=amd64 go build -trimpath -ldflags "-s -w" -o ../dist/ppsim-amd64 ./cmd/ppsim)
+          lipo -create -output "$out/ppsim" dist/ppsim-arm64 dist/ppsim-amd64
+          cp LICENSE "$out/"
+          (cd dist && ditto -c -k --keepParent "$(basename "$out")" "$(basename "$out").zip")
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-macos
+          path: dist/*.zip
+
+  android:
+    name: Android app
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: android
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # the version code is the commit count
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools'
+      - name: Install SDK packages
+        run: |
+          yes | sdkmanager --licenses > /dev/null || true
+          sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0"
+      - name: Prepare signing key
+        env:
+          KEYSTORE_BASE64: ${{ secrets.POCKETPAD_KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            printf '%s' "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
+            echo "POCKETPAD_KEYSTORE_FILE=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
+          fi
+      - name: Build
+        env:
+          POCKETPAD_KEYSTORE_PASSWORD: ${{ secrets.POCKETPAD_KEYSTORE_PASSWORD }}
+          POCKETPAD_KEY_ALIAS: ${{ secrets.POCKETPAD_KEY_ALIAS }}
+          POCKETPAD_KEY_PASSWORD: ${{ secrets.POCKETPAD_KEY_PASSWORD }}
+        run: |
+          set -eu
+          V="$GITHUB_REF_NAME"
+          CODE="$(git rev-list --count HEAD)"
+          mkdir -p ../dist
+          if [ -n "${POCKETPAD_KEYSTORE_FILE:-}" ]; then
+            ./gradlew :app:assembleRelease -PversionName="${V#v}" -PversionCode="$CODE" --no-daemon
+            cp app/build/outputs/apk/release/app-release.apk "../dist/pocketpad-$V.apk"
+          else
+            echo "::warning::No signing key in repository secrets; publishing a debug-signed APK."
+            ./gradlew :app:assembleDebug -PversionName="${V#v}" -PversionCode="$CODE" --no-daemon
+            cp app/build/outputs/apk/debug/app-debug.apk "../dist/pocketpad-$V-debug.apk"
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-android
+          path: dist/*.apk
+
+  publish:
+    name: Publish release
+    needs: [desktop, macos, android]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          body_path: .github/release-notes.md
+          generate_release_notes: true
+          prerelease: ${{ startsWith(github.ref_name, 'v0.') || contains(github.ref_name, '-') }}
