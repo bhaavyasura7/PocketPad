@@ -1,0 +1,20 @@
+/dist/
+*.exe
+*.test
+*.out
+desktop/pocketpad
+desktop/ppsim
+
+# Android / Gradle
+.gradle/
+build/
+local.properties
+*.apk
+*.aab
+*.keystore
+*.jks
+.idea/
+*.iml
+.DS_Store
+.vscode/*
+!.vscode/extensions.json
