@@ -256,6 +256,10 @@ func macButtonMap(p MacKeyProfile) []buttonKey {
 	return out
 }
 
+// mouseIdleGuard suppresses tiny stick values so a resting thumb can never
+// creep the pointer; the mouse curve then keeps light touches precise.
+const mouseIdleGuard = 0.12
+
 // mouseDelta converts the right stick into pointer movement in pixels for one
 // update tick. A curved response keeps small deflections slow for precise
 // aiming and map pointing while a full push still moves fast (the curve is
@@ -263,7 +267,7 @@ func macButtonMap(p MacKeyProfile) []buttonKey {
 // screen +Y is down, so the Y axis flips.
 func mouseDelta(rx, ry, dtSeconds, speedPxPerSecond float32) (float64, float64) {
 	mag := math.Sqrt(float64(rx)*float64(rx) + float64(ry)*float64(ry))
-	if mag == 0 {
+	if mag < mouseIdleGuard {
 		return 0, 0
 	}
 	if mag > 1 {
