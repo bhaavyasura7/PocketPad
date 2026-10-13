@@ -16,7 +16,7 @@ import io.pocketpad.protocol.DPad
 /**
  * The multi-touch controller surface. A custom View (not Compose gestures)
  * so pointer indices give reliable simultaneous touches at no per-frame cost
- * when idle. See docs/HANDOFF.md §4.2 for the interaction rules.
+ * when idle. See docs/DEVELOPMENT.md, "Touch handling".
  */
 class ControllerView @JvmOverloads constructor(
     context: Context,

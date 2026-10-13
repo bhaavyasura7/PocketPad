@@ -63,7 +63,7 @@ class HidReportTest {
     @Test
     fun descriptorIsStable() {
         // The descriptor is frozen for Bluetooth mode; changing it is a
-        // protocol-visible change (docs/HANDOFF.md §4.4).
+        // protocol-visible change (docs/DEVELOPMENT.md, "Bluetooth HID report").
         assertEquals(0x05, HidReport.DESCRIPTOR[0])
         assertEquals(0xC0.toByte(), HidReport.DESCRIPTOR.last())
         assertEquals(95, HidReport.DESCRIPTOR.size)

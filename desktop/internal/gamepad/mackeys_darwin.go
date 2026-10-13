@@ -186,17 +186,18 @@ func (m *macKeys) Update(s protocol.ControllerState) error {
 	}
 
 	// Triggers are mouse buttons unless the profile mapped them to keys.
+	ltRight, rtRight := p.triggerClicks()
 	if p.LTKey == keyNone {
 		lt := s.LeftTrigger > 0.5
 		if lt != m.ltDown {
-			C.pp_mouse_button(C.int(0), C.int(boolInt(lt)))
+			C.pp_mouse_button(C.int(boolInt(ltRight)), C.int(boolInt(lt)))
 			m.ltDown = lt
 		}
 	}
 	if p.RTKey == keyNone {
 		rt := s.RightTrigger > 0.5
 		if rt != m.rtDown {
-			C.pp_mouse_button(C.int(1), C.int(boolInt(rt)))
+			C.pp_mouse_button(C.int(boolInt(rtRight)), C.int(boolInt(rt)))
 			m.rtDown = rt
 		}
 	}
@@ -241,12 +242,13 @@ func (m *macKeys) Close() error {
 		C.pp_key(C.int(key), C.int(0))
 	}
 	m.held = map[int]bool{}
+	ltRight, rtRight := currentProfile().triggerClicks()
 	if m.ltDown {
-		C.pp_mouse_button(C.int(0), C.int(0))
+		C.pp_mouse_button(C.int(boolInt(ltRight)), C.int(0))
 		m.ltDown = false
 	}
 	if m.rtDown {
-		C.pp_mouse_button(C.int(1), C.int(0))
+		C.pp_mouse_button(C.int(boolInt(rtRight)), C.int(0))
 		m.rtDown = false
 	}
 	m.started = false
