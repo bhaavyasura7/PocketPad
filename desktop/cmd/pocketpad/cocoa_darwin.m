@@ -118,88 +118,120 @@ void pp_app_launch(const char *title, const char *code, const char *address,
 	@autoreleasepool {
 		NSApplication *app = [NSApplication sharedApplication];
 		[app setActivationPolicy:NSApplicationActivationPolicyRegular];
+		app.appearance = [NSAppearance appearanceNamed:NSAppearanceNameDarkAqua];
 		gDelegate = [[PPAppDelegate alloc] init];
 		[app setDelegate:gDelegate];
 
-		NSRect frame = NSMakeRect(0, 0, 440, 640);
+		NSColor *bg = [NSColor colorWithSRGBRed:0.043 green:0.051 blue:0.071 alpha:1.0];
+		NSColor *accent = [NSColor colorWithSRGBRed:0.486 green:0.361 blue:1.0 alpha:1.0];
+		NSColor *chip = [NSColor colorWithSRGBRed:0.094 green:0.106 blue:0.145 alpha:1.0];
+
+		CGFloat W = 460;
+		CGFloat H = 700;
+		NSRect frame = NSMakeRect(0, 0, W, H);
 		NSWindowStyleMask style = NSWindowStyleMaskTitled | NSWindowStyleMaskClosable | NSWindowStyleMaskMiniaturizable;
 		gWindow = [[NSWindow alloc] initWithContentRect:frame styleMask:style backing:NSBackingStoreBuffered defer:NO];
 		gWindow.title = [NSString stringWithUTF8String:title];
 		gWindow.releasedWhenClosed = NO;
+		gWindow.backgroundColor = bg;
+		gWindow.titlebarAppearsTransparent = YES;
+		gWindow.appearance = [NSAppearance appearanceNamed:NSAppearanceNameDarkAqua];
 		[gWindow center];
 		NSView *content = gWindow.contentView;
 
-		CGFloat y = 596;
+		CGFloat y = H - 34;
 
-		// Official logo beside the heading.
+		// Centered logo and wordmark.
 		if (logo != NULL && logoLen > 0) {
-			NSImageView *logoView = [[NSImageView alloc] initWithFrame:NSMakeRect(24, y - 30, 64, 64)];
+			NSImageView *logoView = [[NSImageView alloc] initWithFrame:NSMakeRect((W - 68) / 2, y - 68, 68, 68)];
 			logoView.image = [[NSImage alloc] initWithData:[NSData dataWithBytes:logo length:logoLen]];
 			logoView.imageScaling = NSImageScaleProportionallyUpOrDown;
 			logoView.wantsLayer = YES;
-			logoView.layer.cornerRadius = 14;
+			logoView.layer.cornerRadius = 15;
 			logoView.layer.masksToBounds = YES;
 			[content addSubview:logoView];
+			y -= 80;
 		}
 
 		NSTextField *heading = [NSTextField labelWithString:@"PocketPad"];
-		heading.font = [NSFont boldSystemFontOfSize:24];
-		heading.frame = NSMakeRect(104, y, 312, 32);
+		heading.font = [NSFont boldSystemFontOfSize:26];
+		heading.alignment = NSTextAlignmentCenter;
+		heading.frame = NSMakeRect(0, y, W, 34);
 		[content addSubview:heading];
 		y -= 26;
 
-		NSTextField *sub = [NSTextField labelWithString:@"Scan this with the PocketPad app on your phone — it fills everything in for you."];
+		NSTextField *sub = [NSTextField labelWithString:@"Scan this with the PocketPad app on your phone.\nIt fills everything in for you."];
 		sub.font = [NSFont systemFontOfSize:12];
 		sub.textColor = [NSColor secondaryLabelColor];
-		sub.frame = NSMakeRect(104, y - 8, 312, 32);
+		sub.alignment = NSTextAlignmentCenter;
 		sub.maximumNumberOfLines = 2;
 		sub.lineBreakMode = NSLineBreakByWordWrapping;
+		sub.frame = NSMakeRect(20, y - 20, W - 40, 34);
 		[content addSubview:sub];
-		y -= 44;
+		y -= 52;
 
-		// QR code: 300x300 centred.
-		NSImageView *qr = [[NSImageView alloc] initWithFrame:NSMakeRect(70, y - 304, 300, 300)];
-		NSData *data = [NSData dataWithBytes:png length:pngLen];
-		NSImage *image = [[NSImage alloc] initWithData:data];
-		qr.image = image;
+		// QR in a white rounded card with a purple glow.
+		CGFloat qrSize = 280;
+		NSView *qrCard = [[NSView alloc] initWithFrame:NSMakeRect((W - qrSize) / 2, y - qrSize, qrSize, qrSize)];
+		qrCard.wantsLayer = YES;
+		qrCard.layer.backgroundColor = [[NSColor whiteColor] CGColor];
+		qrCard.layer.cornerRadius = 18;
+		qrCard.layer.shadowColor = accent.CGColor;
+		qrCard.layer.shadowOpacity = 0.55;
+		qrCard.layer.shadowRadius = 22;
+		qrCard.layer.shadowOffset = CGSizeMake(0, -3);
+		[content addSubview:qrCard];
+
+		NSImageView *qr = [[NSImageView alloc] initWithFrame:NSMakeRect(14, 14, qrSize - 28, qrSize - 28)];
+		qr.image = [[NSImage alloc] initWithData:[NSData dataWithBytes:png length:pngLen]];
 		qr.imageScaling = NSImageScaleProportionallyUpOrDown;
-		[qr setWantsLayer:YES];
-		qr.layer.cornerRadius = 12;
-		qr.layer.backgroundColor = [[NSColor whiteColor] CGColor];
-		[content addSubview:qr];
-		y -= 322;
+		[qrCard addSubview:qr];
+		y -= qrSize + 24;
 
-		NSTextField *codeHelp = [NSTextField labelWithString:@"Or type this code in the app:"];
-		codeHelp.font = [NSFont systemFontOfSize:12];
-		codeHelp.textColor = [NSColor secondaryLabelColor];
-		codeHelp.frame = NSMakeRect(24, y, 392, 16);
+		NSTextField *codeHelp = [NSTextField labelWithString:@"OR TYPE THIS CODE IN THE APP"];
+		codeHelp.font = [NSFont systemFontOfSize:10 weight:NSFontWeightSemibold];
+		codeHelp.textColor = [NSColor tertiaryLabelColor];
+		codeHelp.alignment = NSTextAlignmentCenter;
+		codeHelp.frame = NSMakeRect(20, y, W - 40, 14);
 		[content addSubview:codeHelp];
-		y -= 26;
+		y -= 32;
+
+		// Pairing code in a rounded chip, in the brand colour.
+		NSView *codeChip = [[NSView alloc] initWithFrame:NSMakeRect(58, y, W - 116, 36)];
+		codeChip.wantsLayer = YES;
+		codeChip.layer.backgroundColor = chip.CGColor;
+		codeChip.layer.cornerRadius = 9;
+		[content addSubview:codeChip];
 
 		NSTextField *codeField = [NSTextField labelWithString:[NSString stringWithUTF8String:code]];
-		codeField.font = [NSFont monospacedSystemFontOfSize:16 weight:NSFontWeightSemibold];
+		codeField.font = [NSFont monospacedSystemFontOfSize:15 weight:NSFontWeightSemibold];
+		codeField.textColor = accent;
+		codeField.alignment = NSTextAlignmentCenter;
 		codeField.selectable = YES;
-		codeField.frame = NSMakeRect(24, y, 392, 22);
-		[content addSubview:codeField];
-		y -= 30;
+		codeField.frame = NSMakeRect(0, 8, W - 116, 20);
+		[codeChip addSubview:codeField];
+		y -= 26;
 
 		NSTextField *addrField = [NSTextField labelWithString:[NSString stringWithUTF8String:address]];
 		addrField.font = [NSFont monospacedSystemFontOfSize:12 weight:NSFontWeightRegular];
 		addrField.textColor = [NSColor secondaryLabelColor];
+		addrField.alignment = NSTextAlignmentCenter;
 		addrField.selectable = YES;
-		addrField.frame = NSMakeRect(24, y, 392, 18);
+		addrField.frame = NSMakeRect(20, y, W - 40, 18);
 		[content addSubview:addrField];
-		y -= 36;
+		y -= 34;
 
 		gStatus = [NSTextField labelWithString:@"Starting…"];
-		gStatus.font = [NSFont systemFontOfSize:13];
+		gStatus.font = [NSFont systemFontOfSize:12];
+		gStatus.textColor = [NSColor secondaryLabelColor];
+		gStatus.alignment = NSTextAlignmentCenter;
 		gStatus.maximumNumberOfLines = 3;
 		gStatus.lineBreakMode = NSLineBreakByWordWrapping;
-		gStatus.frame = NSMakeRect(24, y - 36, 392, 56);
+		gStatus.frame = NSMakeRect(20, y - 40, W - 40, 58);
 		[content addSubview:gStatus];
 
-		NSButton *mappings = [NSButton buttonWithTitle:@"Mappings…" target:gDelegate action:@selector(showMappings:)];
-		mappings.frame = NSMakeRect(24, 30, 392, 34);
+		NSButton *mappings = [NSButton buttonWithTitle:@"Mapping editor…" target:gDelegate action:@selector(showMappings:)];
+		mappings.frame = NSMakeRect((W - 220) / 2, 26, 220, 34);
 		[content addSubview:mappings];
 
 		[gWindow makeKeyAndOrderFront:nil];
@@ -265,15 +297,21 @@ void pp_app_show_editor(const char *json) {
 		}
 
 		if (gEditorWindow == nil) {
+			NSColor *bg = [NSColor colorWithSRGBRed:0.043 green:0.051 blue:0.071 alpha:1.0];
+			NSColor *elevated = [NSColor colorWithSRGBRed:0.071 green:0.082 blue:0.114 alpha:1.0];
 			NSRect frame = NSMakeRect(0, 0, 400, 560);
 			NSWindowStyleMask style = NSWindowStyleMaskTitled | NSWindowStyleMaskClosable;
 			gEditorWindow = [[NSWindow alloc] initWithContentRect:frame styleMask:style backing:NSBackingStoreBuffered defer:NO];
 			gEditorWindow.title = @"PocketPad — Mappings";
 			gEditorWindow.releasedWhenClosed = NO;
+			gEditorWindow.backgroundColor = bg;
+			gEditorWindow.titlebarAppearsTransparent = YES;
+			gEditorWindow.appearance = [NSAppearance appearanceNamed:NSAppearanceNameDarkAqua];
 			[gEditorWindow center];
 			NSView *content = gEditorWindow.contentView;
 
 			NSTextField *head = [NSTextField labelWithString:@"Profile"];
+			head.font = [NSFont systemFontOfSize:12 weight:NSFontWeightSemibold];
 			head.frame = NSMakeRect(16, 520, 60, 20);
 			[content addSubview:head];
 
@@ -291,8 +329,12 @@ void pp_app_show_editor(const char *json) {
 
 			NSScrollView *scroll = [[NSScrollView alloc] initWithFrame:NSMakeRect(12, 60, 376, 426)];
 			scroll.hasVerticalScroller = YES;
-			scroll.borderType = NSBezelBorder;
+			scroll.borderType = NSNoBorder;
+			scroll.drawsBackground = NO;
 			NSView *doc = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 356, 10)];
+			doc.wantsLayer = YES;
+			doc.layer.backgroundColor = elevated.CGColor;
+			doc.layer.cornerRadius = 10;
 			[scroll setDocumentView:doc];
 			[content addSubview:scroll];
 
@@ -321,7 +363,7 @@ void pp_app_show_editor(const char *json) {
 				NSString *key = row[0];
 				NSTextField *label = [NSTextField labelWithString:row[1]];
 				label.font = [NSFont systemFontOfSize:12];
-				label.frame = NSMakeRect(10, docHeight - (i + 1) * rowHeight + 6, 150, 18);
+				label.frame = NSMakeRect(14, docHeight - (i + 1) * rowHeight + 6, 146, 18);
 				[doc addSubview:label];
 
 				NSPopUpButton *popup;
