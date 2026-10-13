@@ -121,14 +121,41 @@ func TestMouseDelta(t *testing.T) {
 		d := a - b
 		return d < 0.01 && d > -0.01
 	}
+	// Full deflection keeps the maximum speed.
 	dx, dy := mouseDelta(1, 0, 0.02, 900)
 	if !close(dx, 18) || dy != 0 {
-		t.Fatalf("delta %v,%v", dx, dy)
+		t.Fatalf("full deflection delta %v,%v", dx, dy)
 	}
 	// Protocol +Y is up, screen +Y is down.
 	_, dy = mouseDelta(0, 1, 0.02, 900)
 	if !close(dy, -18) {
 		t.Fatalf("dy %v", dy)
+	}
+	// Half deflection is slower than half speed (curve): ~34% of maximum.
+	dx, _ = mouseDelta(0.5, 0, 0.02, 900)
+	if dx > 7 || dx < 5.5 {
+		t.Fatalf("half deflection delta %v, want ~6.1", dx)
+	}
+	// A light touch is precise: ~4% of maximum speed.
+	dx, _ = mouseDelta(0.1, 0, 0.02, 900)
+	if dx > 1 {
+		t.Fatalf("light deflection delta %v, want < 1", dx)
+	}
+}
+
+func TestGTADPadScrollMapping(t *testing.T) {
+	g := profile(t, "gta")
+	if !g.DPadScroll {
+		t.Fatal("gta profile should scroll with the d-pad")
+	}
+	keys := desiredKeys(protocol.ControllerState{DPad: protocol.DPadUp}, g)
+	if keys[macKeyUp] {
+		t.Fatalf("d-pad up must not press an arrow key in the gta profile: %v", keys)
+	}
+	// Left and right still send arrow keys.
+	keys = desiredKeys(protocol.ControllerState{DPad: protocol.DPadLeft}, g)
+	if !keys[macKeyLeft] {
+		t.Fatalf("d-pad left should still press the arrow key: %v", keys)
 	}
 }
 

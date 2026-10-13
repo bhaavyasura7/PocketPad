@@ -97,10 +97,21 @@ static void pp_mouse_button(int right, int down) {
 		CFRelease(ev);
 	}
 }
+
+// pp_scroll turns the wheel: positive lines scroll up (map zoom in,
+// previous weapon), negative scroll down.
+static void pp_scroll(int32_t lines) {
+	CGEventRef ev = CGEventCreateScrollWheelEvent(NULL, kCGScrollEventUnitLine, 1, lines);
+	if (ev != NULL) {
+		CGEventPost(kCGHIDEventTap, ev);
+		CFRelease(ev);
+	}
+}
 */
 import "C"
 
 import (
+	"math"
 	"sync"
 	"time"
 
@@ -128,6 +139,14 @@ type macKeys struct {
 	trusted        bool
 	started        bool
 	rumble         RumbleHandler
+
+	// Sub-pixel pointer remainder: the curved response can ask for less than
+	// one pixel per tick, and without carrying the remainder the cursor would
+	// stall at slow speeds.
+	fracX, fracY float64
+
+	scrollUpHeld   bool
+	scrollDownHeld bool
 }
 
 func newMacKeys() *macKeys { return &macKeys{held: map[int]bool{}} }
@@ -212,9 +231,26 @@ func (m *macKeys) Update(s protocol.ControllerState) error {
 	m.last = now
 	if p.RightStickMouse && (s.RightX != 0 || s.RightY != 0) {
 		dx, dy := mouseDelta(s.RightX, s.RightY, float32(dt), mouseSpeedPxPerSecond)
-		if dx != 0 || dy != 0 {
-			C.pp_mouse_move_by(C.double(dx), C.double(dy))
+		m.fracX += dx
+		m.fracY += dy
+		ix, iy := math.Trunc(m.fracX), math.Trunc(m.fracY)
+		if ix != 0 || iy != 0 {
+			m.fracX -= ix
+			m.fracY -= iy
+			C.pp_mouse_move_by(C.double(ix), C.double(iy))
 		}
+	}
+
+	// In scrolling profiles the d-pad edges turn the wheel.
+	if p.DPadScroll {
+		up, down := s.DPad.Up(), s.DPad.Down()
+		if up && !m.scrollUpHeld {
+			C.pp_scroll(1)
+		}
+		if down && !m.scrollDownHeld {
+			C.pp_scroll(-1)
+		}
+		m.scrollUpHeld, m.scrollDownHeld = up, down
 	}
 	return nil
 }
