@@ -69,7 +69,10 @@ Without `-code`, it reads the local receiver's pairing code; with
 `-insecure`.
 
 The macOS backends and the `pocketpad app` window use cgo and build only on
-macOS. `./scripts/build-mac-app.sh` produces `dist/PocketPad.app`.
+macOS. `./scripts/build-mac-app.sh` produces `dist/PocketPad.app`, signed
+with the local "PocketPad Dev" identity when `./scripts/make-signing-cert.sh`
+has created it. A stable signature keeps the Accessibility permission across
+rebuilds.
 
 ### Android (JDK 17, Android SDK platform 35)
 
