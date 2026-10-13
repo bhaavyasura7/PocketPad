@@ -96,7 +96,7 @@ jobs:
       - name: Install SDK packages
         run: |
           yes | sdkmanager --licenses > /dev/null || true
-          sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0"
+          sdkmanager "platform-tools" "platforms;android-36" "build-tools;36.0.0"
       - name: Prepare signing key
         env:
           KEYSTORE_BASE64: ${{ secrets.POCKETPAD_KEYSTORE_BASE64 }}
@@ -110,14 +110,23 @@ jobs:
           POCKETPAD_KEYSTORE_PASSWORD: ${{ secrets.POCKETPAD_KEYSTORE_PASSWORD }}
           POCKETPAD_KEY_ALIAS: ${{ secrets.POCKETPAD_KEY_ALIAS }}
           POCKETPAD_KEY_PASSWORD: ${{ secrets.POCKETPAD_KEY_PASSWORD }}
+          # Real AdMob IDs (repository variables). Without them, release
+          # builds show Google's test ads.
+          POCKETPAD_ADMOB_APP_ID: ${{ vars.POCKETPAD_ADMOB_APP_ID }}
+          POCKETPAD_ADMOB_BANNER_ID: ${{ vars.POCKETPAD_ADMOB_BANNER_ID }}
         run: |
           set -eu
           V="$GITHUB_REF_NAME"
           CODE="$(git rev-list --count HEAD)"
           mkdir -p ../dist
           if [ -n "${POCKETPAD_KEYSTORE_FILE:-}" ]; then
-            ./gradlew :app:assembleRelease -PversionName="${V#v}" -PversionCode="$CODE" --no-daemon
+            if [ -z "${POCKETPAD_ADMOB_APP_ID:-}" ] || [ -z "${POCKETPAD_ADMOB_BANNER_ID:-}" ]; then
+              echo "::warning::AdMob IDs are not set; this release shows test ads."
+            fi
+            ./gradlew :app:assembleRelease :app:bundleRelease -PversionName="${V#v}" -PversionCode="$CODE" --no-daemon
             cp app/build/outputs/apk/release/app-release.apk "../dist/pocketpad-$V.apk"
+            # The App Bundle is what Google Play takes.
+            cp app/build/outputs/bundle/release/app-release.aab "../dist/pocketpad-$V.aab"
           else
             echo "::warning::No signing key in repository secrets; publishing a debug-signed APK."
             ./gradlew :app:assembleDebug -PversionName="${V#v}" -PversionCode="$CODE" --no-daemon
@@ -126,7 +135,9 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: release-android
-          path: dist/*.apk
+          path: |
+            dist/*.apk
+            dist/*.aab
 
   publish:
     name: Publish release

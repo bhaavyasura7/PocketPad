@@ -3,8 +3,10 @@
 <img src="PocketPad.png" alt="PocketPad logo" width="140">
 
 PocketPad turns an Android phone into a low-latency game controller for
-Windows and macOS. It works over your local network and needs no accounts,
-no cloud service and no internet connection.
+Windows and macOS. Controller input travels only over your local network or
+Bluetooth, with no accounts and no cloud service. The Android app shows a
+banner ad on its Settings screen, never during play; see the
+[privacy policy](docs/PRIVACY.md).
 
 ## How it works
 
@@ -75,6 +77,8 @@ troubleshooting, is in [docs/GETTING_STARTED.md](docs/GETTING_STARTED.md).
 | [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) | Architecture, building, testing and design rules |
 | [docs/protocol.md](docs/protocol.md) | The wire protocol (normative) |
 | [docs/ROADMAP.md](docs/ROADMAP.md) | Project status and remaining work |
+| [docs/PLAY_STORE.md](docs/PLAY_STORE.md) | Publishing the app on Google Play |
+| [docs/PRIVACY.md](docs/PRIVACY.md) | Privacy policy |
 
 ## Repository layout
 

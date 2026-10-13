@@ -15,6 +15,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.viewmodel.compose.viewModel
+import io.pocketpad.app.ui.Ads
 import io.pocketpad.app.ui.AppViewModel
 import io.pocketpad.app.ui.ConnectScreen
 import io.pocketpad.app.ui.ControllerScreen
@@ -27,6 +28,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        Ads.gatherConsent(this)
         setContent {
             PocketPadTheme {
                 val vm: AppViewModel = viewModel()

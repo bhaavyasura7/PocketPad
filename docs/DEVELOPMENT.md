@@ -75,7 +75,7 @@ with the local "PocketPad Dev" identity when `./scripts/make-signing-cert.sh`
 has created it. A stable signature keeps the Accessibility permission across
 rebuilds.
 
-### Android (JDK 17, Android SDK platform 35)
+### Android (JDK 17, Android SDK platform 36)
 
 ```sh
 cd android
@@ -201,6 +201,7 @@ Source is in `android/app/src/main/kotlin/io/pocketpad/app`:
 | `core/QrPairing.kt` | Parsing of the pairing QR code |
 | `core/Prefs.kt` | Saved receivers, pairing secrets, device ID and settings |
 | `ui/` | Compose screens: connect, controller, controls reference, settings |
+| `ui/Ads.kt` | Consent (Google UMP) and the Settings-screen banner (AdMob) |
 
 ### Touch handling
 
@@ -233,6 +234,20 @@ cancelled. On phones without amplitude control, the phone vibrates only
 above 30% strength. Updates closer than 15 ms apart are dropped unless they
 stop the motor. Each vibration is bounded by the duration in the packet, so
 a lost stop command cannot leave the phone vibrating.
+
+### Ads
+
+The only ad is an adaptive banner at the bottom of the Settings screen.
+`Ads.gatherConsent` runs at startup: it shows Google's consent form where the
+law requires it and initialises the ads SDK only once ads may be requested.
+Settings offers "Privacy options" where users must be able to change their
+choice. Debug builds always use Google's test IDs; release builds use the
+`POCKETPAD_ADMOB_APP_ID` and `POCKETPAD_ADMOB_BANNER_ID` repository variables
+(see [PLAY_STORE.md](PLAY_STORE.md)).
+
+Never place an ad on the controller screen or load one while a session is
+running: ads there cause accidental taps, which Google Play's policies
+prohibit, and the SDK's work would compete with the input path.
 
 ### Pairing QR code
 
@@ -279,9 +294,10 @@ not available over Bluetooth.
    thread or per-packet allocation.
 5. **Secrets stay secret.** Never log the pairing code, pairing key or
    session keys. Store them with owner-only or app-private permissions.
-6. **The user installs drivers.** PocketPad never installs a driver or
+6. **No ads during play.** Ads stay off the controller screen.
+7. **The user installs drivers.** PocketPad never installs a driver or
    changes system security settings by itself.
-7. **Go is the reference implementation.** The Kotlin code must match the
+8. **Go is the reference implementation.** The Kotlin code must match the
    shared vectors.
 
 ## Changing the protocol
