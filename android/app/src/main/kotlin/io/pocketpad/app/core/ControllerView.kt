@@ -406,21 +406,37 @@ class ControllerView @JvmOverloads constructor(
 
     // --- gaming lights ---
 
-    /** A flowing rainbow band around the four edges, pulsing and brighter
-     * while anything is held. Three stacked thicknesses fake a soft glow. */
+    /** A flowing rainbow (or solid colour) band around the four edges,
+     * pulsing and brighter while anything is held. Three stacked thicknesses
+     * fake a soft glow. Style, speed, brightness and colour come from the
+     * settings. */
     private fun drawGamingLights(canvas: Canvas) {
         if (width <= 0 || height <= 0) return
-        val t = (SystemClock.uptimeMillis() % 6000L) / 6000f
+        val s = settingsProvider()
+        val speed = s.lightsSpeed.coerceIn(0.25f, 4f)
+        val cycleMs = (6000f / speed).toLong().coerceAtLeast(600L)
+        val t = (SystemClock.uptimeMillis() % cycleMs) / cycleMs.toFloat()
         val pulse = 0.8f + 0.2f * sin(t * 12.566f)
         val active = !drawn.isNeutral
-        val alpha = pulse * (if (active) 255f else 140f)
-        edgeBands(canvas, horizontal = true, near = true, t = t, hue0 = 0.00f, alpha = alpha)
-        edgeBands(canvas, horizontal = false, near = false, t = t, hue0 = 0.25f, alpha = alpha)
-        edgeBands(canvas, horizontal = true, near = false, t = t, hue0 = 0.50f, alpha = alpha)
-        edgeBands(canvas, horizontal = false, near = true, t = t, hue0 = 0.75f, alpha = alpha)
+        val brightness = s.lightsBrightness.coerceIn(0.2f, 2f)
+        val alpha = (pulse * (if (active) 255f else 140f) * brightness).coerceAtMost(255f)
+        val rainbow = s.lightsStyle == 0
+        edgeBands(canvas, horizontal = true, near = true, rainbow = rainbow, t = t, hue0 = 0.00f, solid = s.lightsColor, alpha = alpha)
+        edgeBands(canvas, horizontal = false, near = false, rainbow = rainbow, t = t, hue0 = 0.25f, solid = s.lightsColor, alpha = alpha)
+        edgeBands(canvas, horizontal = true, near = false, rainbow = rainbow, t = t, hue0 = 0.50f, solid = s.lightsColor, alpha = alpha)
+        edgeBands(canvas, horizontal = false, near = true, rainbow = rainbow, t = t, hue0 = 0.75f, solid = s.lightsColor, alpha = alpha)
     }
 
-    private fun edgeBands(canvas: Canvas, horizontal: Boolean, near: Boolean, t: Float, hue0: Float, alpha: Float) {
+    private fun edgeBands(
+        canvas: Canvas,
+        horizontal: Boolean,
+        near: Boolean,
+        rainbow: Boolean,
+        t: Float,
+        hue0: Float,
+        solid: Int,
+        alpha: Float,
+    ) {
         val w = width.toFloat()
         val h = height.toFloat()
         val glow = h * 0.05f
@@ -429,10 +445,10 @@ class ControllerView @JvmOverloads constructor(
 
         fun band(thickness: Float, opacity: Float) {
             val colors = intArrayOf(
-                hueColor(hue0, opacity),
-                hueColor(hue0 + 0.16f, opacity),
-                hueColor(hue0 + 0.33f, opacity),
-                hueColor(hue0 + 0.5f, opacity),
+                bandColor(rainbow, hue0 + t + 0.00f, solid, opacity),
+                bandColor(rainbow, hue0 + t + 0.16f, solid, opacity),
+                bandColor(rainbow, hue0 + t + 0.33f, solid, opacity),
+                bandColor(rainbow, hue0 + t + 0.50f, solid, opacity),
             )
             lightsPaint.shader = if (horizontal) {
                 LinearGradient(0f, 0f, w, 0f, colors, null, Shader.TileMode.CLAMP)
@@ -449,6 +465,15 @@ class ControllerView @JvmOverloads constructor(
         band(glow, alpha * 0.10f)
         band(mid, alpha * 0.22f)
         band(core, alpha)
+    }
+
+    private fun bandColor(rainbow: Boolean, hue: Float, solid: Int, opacity: Float): Int {
+        val a = opacity.toInt().coerceIn(0, 255)
+        return if (rainbow) {
+            hueColor(hue, opacity)
+        } else {
+            (solid and 0x00FFFFFF) or (a shl 24)
+        }
     }
 
     private fun hueColor(hue: Float, opacity: Float): Int {

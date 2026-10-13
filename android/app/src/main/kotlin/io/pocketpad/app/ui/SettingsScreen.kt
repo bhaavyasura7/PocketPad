@@ -1,6 +1,10 @@
 package io.pocketpad.app.ui
 
 import android.app.Activity
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -8,8 +12,10 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
@@ -30,6 +36,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -49,6 +57,10 @@ fun SettingsScreen(vm: AppViewModel) {
     var leftHanded by remember { mutableStateOf(vm.prefs.leftHanded) }
     var doubleTap by remember { mutableStateOf(vm.prefs.stickDoubleTap) }
     var lights by remember { mutableStateOf(vm.prefs.gamingLights) }
+    var lightsStyle by remember { mutableIntStateOf(vm.prefs.lightsStyle) }
+    var lightsSpeed by remember { mutableIntStateOf(vm.prefs.lightsSpeed) }
+    var lightsBrightness by remember { mutableIntStateOf(vm.prefs.lightsBrightness) }
+    var lightsColor by remember { mutableIntStateOf(vm.prefs.lightsColor) }
 
     Column(
         modifier = Modifier
@@ -168,6 +180,50 @@ fun SettingsScreen(vm: AppViewModel) {
             vm.settingsChanged()
         }
 
+        if (lights) {
+            Text(stringResource(R.string.setting_lights_style), style = MaterialTheme.typography.bodyLarge)
+            SegmentedRow(
+                options = listOf(
+                    stringResource(R.string.lights_rainbow) to 0,
+                    stringResource(R.string.lights_solid) to 1,
+                ),
+                selected = lightsStyle,
+            ) { lightsStyle = it; vm.prefs.lightsStyle = it; vm.settingsChanged() }
+
+            Text(stringResource(R.string.setting_lights_speed), style = MaterialTheme.typography.bodyLarge)
+            SegmentedRow(
+                options = listOf(
+                    stringResource(R.string.lights_slow) to 50,
+                    stringResource(R.string.lights_normal) to 100,
+                    stringResource(R.string.lights_fast) to 200,
+                ),
+                selected = lightsSpeed,
+            ) { lightsSpeed = it; vm.prefs.lightsSpeed = it; vm.settingsChanged() }
+
+            Text(stringResource(R.string.setting_lights_brightness), style = MaterialTheme.typography.bodyLarge)
+            SegmentedRow(
+                options = listOf(
+                    stringResource(R.string.lights_soft) to 60,
+                    stringResource(R.string.lights_normal) to 100,
+                    stringResource(R.string.lights_bright) to 140,
+                ),
+                selected = lightsBrightness,
+            ) { lightsBrightness = it; vm.prefs.lightsBrightness = it; vm.settingsChanged() }
+
+            if (lightsStyle == 1) {
+                Text(stringResource(R.string.setting_lights_color), style = MaterialTheme.typography.bodyLarge)
+                Row(modifier = Modifier.padding(vertical = 8.dp)) {
+                    LIGHT_COLORS.forEach { color ->
+                        ColorDot(color = color, selected = lightsColor == color) {
+                            lightsColor = color
+                            vm.prefs.lightsColor = color
+                            vm.settingsChanged()
+                        }
+                    }
+                }
+            }
+        }
+
         Spacer(Modifier.height(16.dp))
         OutlinedButton(
             onClick = {
@@ -181,6 +237,10 @@ fun SettingsScreen(vm: AppViewModel) {
                 leftHanded = vm.prefs.leftHanded
                 doubleTap = vm.prefs.stickDoubleTap
                 lights = vm.prefs.gamingLights
+                lightsStyle = vm.prefs.lightsStyle
+                lightsSpeed = vm.prefs.lightsSpeed
+                lightsBrightness = vm.prefs.lightsBrightness
+                lightsColor = vm.prefs.lightsColor
                 vm.settingsChanged()
             },
             modifier = Modifier.fillMaxWidth(),
@@ -253,4 +313,46 @@ private fun SettingSlider(
             steps = steps,
         )
     }
+}
+
+private val LIGHT_COLORS = listOf(
+    0xFF22D3EE.toInt(), // cyan
+    0xFF4ADE80.toInt(), // green
+    0xFFA78BFA.toInt(), // purple
+    0xFFF472B6.toInt(), // pink
+    0xFFF87171.toInt(), // red
+    0xFFFBBF24.toInt(), // gold
+    0xFFFFFFFF.toInt(), // white
+)
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SegmentedRow(options: List<Pair<String, Int>>, selected: Int, onSelect: (Int) -> Unit) {
+    SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+        options.forEachIndexed { index, (label, value) ->
+            SegmentedButton(
+                selected = selected == value,
+                onClick = { onSelect(value) },
+                shape = SegmentedButtonDefaults.itemShape(index = index, count = options.size),
+            ) { Text(label) }
+        }
+    }
+    Spacer(Modifier.height(12.dp))
+}
+
+@Composable
+private fun ColorDot(color: Int, selected: Boolean, onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .padding(end = 10.dp)
+            .size(34.dp)
+            .clip(CircleShape)
+            .background(Color(color))
+            .border(
+                width = if (selected) 3.dp else 1.dp,
+                color = if (selected) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.outline,
+                shape = CircleShape,
+            )
+            .clickable(onClick = onClick),
+    )
 }

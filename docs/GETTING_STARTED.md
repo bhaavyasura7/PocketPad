@@ -256,8 +256,48 @@ slowly for aiming and map waypoints, a full push moves fast.
 Because keys are either pressed or not, steering and throttle are on or off
 in this mode. For analog control, use Bluetooth mode or a Windows computer.
 
-To add a profile, copy an entry in `macKeyProfiles` in
-`desktop/internal/gamepad/mackeys.go` and change the mapping.
+### Fully custom mappings (any key, live reload)
+
+Anything can be remapped without touching code:
+
+```sh
+./pocketpad serve -profile custom
+# or with the Mac app:
+open dist/PocketPad.app --args -profile custom
+```
+
+The first run creates a `mapping.json` next to the receiver's config
+(`~/Library/Application Support/pocketpad/mapping.json` on macOS), shows
+where it is and exits; edit it and start again. **`pocketpad keys` lists
+every accepted key name.**
+
+```json
+{
+  "buttons": {
+    "A": "space", "B": "shift", "X": "f", "Y": "q",
+    "LB": "wheelUp", "RB": "wheelDown", "Guide": "f1"
+  },
+  "dpad": { "up": "up", "down": "down", "left": "left", "right": "right" },
+  "leftStick": { "up": "w", "down": "s", "left": "a", "right": "d" },
+  "rightStick": "mouse",
+  "leftTrigger": "mouseRight",
+  "rightTrigger": "mouseLeft",
+  "stickThreshold": 0.35,
+  "mouseSpeedPxPerSecond": 700
+}
+```
+
+Every control accepts any key name from `pocketpad keys`, or a mouse action:
+`mouseLeft`, `mouseRight`, `wheelUp`, `wheelDown`, or `none`. `rightStick`
+is either `"mouse"` or an object mapping its four directions to actions.
+Unmapped fields do nothing; triggers default to left and right click.
+`stickThreshold` and `mouseSpeedPxPerSecond` are optional tuning knobs.
+
+The file is watched: **save it while playing and the new mapping applies
+within about two seconds** — no restart. A mapping that fails validation
+(unknown key name, unknown button, bad JSON) is reported in the receiver
+log and the previous mapping keeps working, so an in-game edit can never
+break your session.
 
 ## Bluetooth mode
 

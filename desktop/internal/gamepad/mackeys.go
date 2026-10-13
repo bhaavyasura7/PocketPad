@@ -159,12 +159,12 @@ type Action struct {
 	Key  int // valid when Kind == ActionKey
 }
 
-func keyAction(code int) Action         { return Action{Kind: ActionKey, Key: code} }
-func mouseAction(k ActionKind) Action   { return Action{Kind: k} }
-func (a Action) isKey() bool            { return a.Kind == ActionKey }
-func (a Action) isMouseClick() bool     { return a.Kind == ActionMouseLeft || a.Kind == ActionMouseRight }
-func (a Action) isWheel() bool          { return a.Kind == ActionWheelUp || a.Kind == ActionWheelDown }
-func (a Action) unset() bool            { return a.Kind == ActionNone }
+func keyAction(code int) Action       { return Action{Kind: ActionKey, Key: code} }
+func mouseAction(k ActionKind) Action { return Action{Kind: k} }
+func (a Action) isKey() bool          { return a.Kind == ActionKey }
+func (a Action) isMouseClick() bool   { return a.Kind == ActionMouseLeft || a.Kind == ActionMouseRight }
+func (a Action) isWheel() bool        { return a.Kind == ActionWheelUp || a.Kind == ActionWheelDown }
+func (a Action) unset() bool          { return a.Kind == ActionNone }
 
 // MacKeyProfile describes one keyboard/mouse mapping.
 type MacKeyProfile struct {
@@ -217,7 +217,7 @@ func init() {
 		DPadLeft: keyAction(macKeyLeft), DPadRight: keyAction(macKeyRight),
 		StickUp: keyAction(macKeyW), StickDown: keyAction(macKeyS),
 		StickLeft: keyAction(macKeyA), StickRight: keyAction(macKeyD),
-		StickThreshold: stickKeyThresholdDefault,
+		StickThreshold:  stickKeyThresholdDefault,
 		RightStickMouse: true,
 		LT:              mouseAction(ActionMouseLeft),
 		RT:              mouseAction(ActionMouseRight),
@@ -509,7 +509,7 @@ var keyNames = map[string]int{
 	"forwarddelete": macKeyFwdDelete, "del": macKeyFwdDelete,
 	"up": macKeyUp, "down": macKeyDown, "left": macKeyLeft, "right": macKeyRight,
 	"home": macKeyHome, "end": macKeyEnd, "pageup": macKeyPageUp, "pagedown": macKeyPageDown,
-	"help": macKeyHelp,
+	"help":  macKeyHelp,
 	"minus": macKeyMinus, "equal": macKeyEqual, "comma": macKeyComma,
 	"period": macKeyPeriod, "slash": macKeySlash, "backslash": macKeyBackslash,
 	"semicolon": macKeySemicolon, "quote": macKeyQuote, "grave": macKeyGrave,
@@ -738,6 +738,11 @@ func ParseProfile(b []byte) (MacKeyProfile, error) {
 	return p, nil
 }
 
+var buttonDisplayName = map[string]string{
+	"a": "A", "b": "B", "x": "X", "y": "Y", "lb": "LB", "rb": "RB",
+	"back": "Back", "start": "Start", "guide": "Guide", "ls": "LS", "rs": "RS",
+}
+
 // toFileProfile converts a profile back into the JSON shape (template).
 func toFileProfile(p MacKeyProfile) fileProfile {
 	fp := fileProfile{
@@ -750,7 +755,7 @@ func toFileProfile(p MacKeyProfile) fileProfile {
 	}
 	for name, btn := range buttonNames {
 		if a, ok := p.Buttons[btn]; ok && !a.unset() {
-			fp.Buttons[strings.ToUpper(name[:1])+name[1:]] = actionToString(a)
+			fp.Buttons[buttonDisplayName[name]] = actionToString(a)
 		}
 	}
 	set := func(m map[string]string, dir string, a Action) {

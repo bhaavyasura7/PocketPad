@@ -44,4 +44,9 @@ data class UiSettings(
     val layoutScale: Float = 1.0f,
     val stickDoubleTap: Boolean = false,
     val gamingLights: Boolean = true,
+    /** 0 = flowing rainbow, 1 = solid colour. */
+    val lightsStyle: Int = 0,
+    val lightsSpeed: Float = 1.0f,
+    val lightsBrightness: Float = 1.0f,
+    val lightsColor: Int = 0xFF22D3EE.toInt(),
 )

@@ -80,14 +80,25 @@
     <string name="setting_stick_double_tap">Stick click by double‑tap</string>
     <string name="setting_stick_double_tap_summary">Off: use the separate L3 / R3 buttons.</string>
     <string name="setting_lights">Gaming lights</string>
-    <string name="setting_lights_summary">RGB glow around the screen edges; brighter while you play.</string>
+    <string name="setting_lights_summary">Glow around the screen edges; brighter while you play.</string>
+    <string name="setting_lights_style">Light style</string>
+    <string name="setting_lights_speed">Light speed</string>
+    <string name="setting_lights_brightness">Light brightness</string>
+    <string name="setting_lights_color">Light color</string>
+    <string name="lights_rainbow">Rainbow</string>
+    <string name="lights_solid">Solid</string>
+    <string name="lights_slow">Slow</string>
+    <string name="lights_normal">Normal</string>
+    <string name="lights_fast">Fast</string>
+    <string name="lights_soft">Soft</string>
+    <string name="lights_bright">Bright</string>
     <string name="done">Done</string>
     <string name="reset_settings">Reset to defaults</string>
     <string name="privacy_options">Privacy options</string>
 
     <!-- Controls reference -->
     <string name="controls_title">Controls</string>
-    <string name="controls_profile_note">The active mapping is chosen on the computer:  ./pocketpad serve -profile gta | racing | general</string>
+    <string name="controls_profile_note">The active mapping is chosen on the computer:  -profile gta | racing | general — or a fully custom mapping.json (see docs/GETTING_STARTED.md)</string>
     <string name="controls_gta">GTA V and similar  (profile: gta)</string>
     <string name="controls_racing">Racing games  (profile: racing)</string>
     <string name="controls_general">General / desktop / Minecraft  (profile: general)</string>

@@ -145,11 +145,14 @@ type macKeys struct {
 	// stall at slow speeds.
 	fracX, fracY float64
 
-	scrollUpHeld   bool
-	scrollDownHeld bool
+	leftDown  bool
+	rightDown bool
+	wheelHeld map[int]bool
 }
 
-func newMacKeys() *macKeys { return &macKeys{held: map[int]bool{}} }
+func newMacKeys() *macKeys {
+	return &macKeys{held: map[int]bool{}, wheelHeld: map[int]bool{}}
+}
 
 // MacKeysTrusted reports whether this process may post synthetic events.
 func MacKeysTrusted() bool { return C.pp_ax_trusted(C.int(0)) != 0 }
@@ -190,6 +193,7 @@ func (m *macKeys) Update(s protocol.ControllerState) error {
 	}
 	p := currentProfile()
 
+	// Keys: diff the desired set against what is held.
 	want := desiredKeys(s, p)
 	for key := range m.held {
 		if !want[key] {
@@ -204,21 +208,28 @@ func (m *macKeys) Update(s protocol.ControllerState) error {
 		}
 	}
 
-	// Triggers are mouse buttons unless the profile mapped them to keys.
-	ltRight, rtRight := p.triggerClicks()
-	if p.LTKey == keyNone {
-		lt := s.LeftTrigger > 0.5
-		if lt != m.ltDown {
-			C.pp_mouse_button(C.int(boolInt(ltRight)), C.int(boolInt(lt)))
-			m.ltDown = lt
+	// Mouse buttons: any control the profile maps to a click holds it down
+	// while pressed.
+	ml, mr := desiredMouse(s, p)
+	if ml != m.leftDown {
+		C.pp_mouse_button(C.int(0), C.int(boolInt(ml)))
+		m.leftDown = ml
+	}
+	if mr != m.rightDown {
+		C.pp_mouse_button(C.int(1), C.int(boolInt(mr)))
+		m.rightDown = mr
+	}
+
+	// Wheel actions fire one notch per press edge.
+	active := activeWheels(s, p)
+	for src, dir := range active {
+		if !m.wheelHeld[src] {
+			C.pp_scroll(C.int32_t(dir))
 		}
 	}
-	if p.RTKey == keyNone {
-		rt := s.RightTrigger > 0.5
-		if rt != m.rtDown {
-			C.pp_mouse_button(C.int(boolInt(rtRight)), C.int(boolInt(rt)))
-			m.rtDown = rt
-		}
+	m.wheelHeld = make(map[int]bool, len(active))
+	for src := range active {
+		m.wheelHeld[src] = true
 	}
 
 	// Right stick moves the pointer from wherever it is now, so a physical
@@ -230,7 +241,11 @@ func (m *macKeys) Update(s protocol.ControllerState) error {
 	}
 	m.last = now
 	if p.RightStickMouse && (s.RightX != 0 || s.RightY != 0) {
-		dx, dy := mouseDelta(s.RightX, s.RightY, float32(dt), mouseSpeedPxPerSecond)
+		speed := float32(mouseSpeedPxPerSecond)
+		if p.MouseSpeedPxPerSecond > 0 {
+			speed = float32(p.MouseSpeedPxPerSecond)
+		}
+		dx, dy := mouseDelta(s.RightX, s.RightY, float32(dt), speed)
 		m.fracX += dx
 		m.fracY += dy
 		ix, iy := math.Trunc(m.fracX), math.Trunc(m.fracY)
@@ -239,18 +254,6 @@ func (m *macKeys) Update(s protocol.ControllerState) error {
 			m.fracY -= iy
 			C.pp_mouse_move_by(C.double(ix), C.double(iy))
 		}
-	}
-
-	// In scrolling profiles the d-pad edges turn the wheel.
-	if p.DPadScroll {
-		up, down := s.DPad.Up(), s.DPad.Down()
-		if up && !m.scrollUpHeld {
-			C.pp_scroll(1)
-		}
-		if down && !m.scrollDownHeld {
-			C.pp_scroll(-1)
-		}
-		m.scrollUpHeld, m.scrollDownHeld = up, down
 	}
 	return nil
 }
@@ -278,15 +281,15 @@ func (m *macKeys) Close() error {
 		C.pp_key(C.int(key), C.int(0))
 	}
 	m.held = map[int]bool{}
-	ltRight, rtRight := currentProfile().triggerClicks()
-	if m.ltDown {
-		C.pp_mouse_button(C.int(boolInt(ltRight)), C.int(0))
-		m.ltDown = false
+	if m.leftDown {
+		C.pp_mouse_button(C.int(0), C.int(0))
+		m.leftDown = false
 	}
-	if m.rtDown {
-		C.pp_mouse_button(C.int(boolInt(rtRight)), C.int(0))
-		m.rtDown = false
+	if m.rightDown {
+		C.pp_mouse_button(C.int(1), C.int(0))
+		m.rightDown = false
 	}
+	m.wheelHeld = map[int]bool{}
 	m.started = false
 	return nil
 }

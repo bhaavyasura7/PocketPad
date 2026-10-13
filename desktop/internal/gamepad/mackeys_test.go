@@ -1,6 +1,7 @@
 package gamepad
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/bhaavyasura7/pocketpad/desktop/internal/protocol"
@@ -21,7 +22,7 @@ func TestDesiredKeysButtons(t *testing.T) {
 		Buttons: protocol.ButtonA | protocol.ButtonB | protocol.ButtonLB | protocol.ButtonGuide,
 	}
 	keys := desiredKeys(s, g)
-	for _, want := range []int{macKeySpace, macKeyLeftShift, macKeyTab, macKeyF1} {
+	for _, want := range []int{macKeySpace, macKeyShift, macKeyTab, macKeyF1} {
 		if !keys[want] {
 			t.Fatalf("key %d missing from %v", want, keys)
 		}
@@ -36,7 +37,7 @@ func TestEveryProfileMapsEveryButton(t *testing.T) {
 		p := profile(t, name)
 		for i := 0; i < 11; i++ {
 			btn := protocol.Buttons(1 << i)
-			if len(desiredKeys(protocol.ControllerState{Buttons: btn}, p)) == 0 {
+			if p.Buttons[btn].unset() {
 				t.Fatalf("profile %s: button bit %d has no mapping", name, i)
 			}
 		}
@@ -82,7 +83,7 @@ func TestRacingProfileTriggersAreThrottleAndBrake(t *testing.T) {
 	}
 }
 
-func TestGTAProfileVehicleKeys(t *testing.T) {
+func TestGTAProfileVehicleKeysAndClicks(t *testing.T) {
 	g := profile(t, "gta")
 	if !g.RightStickMouse {
 		t.Fatal("gta profile uses mouse look")
@@ -91,8 +92,34 @@ func TestGTAProfileVehicleKeys(t *testing.T) {
 	if !keys[macKeyF] || !keys[macKeyQ] {
 		t.Fatalf("gta keys wrong: %v", keys)
 	}
-	if keys[macKeyE] { // LB only
+	if keys[macKeyE] {
 		t.Fatal("unexpected E")
+	}
+
+	// LT aims (right click), RT fires (left click).
+	left, right := desiredMouse(protocol.ControllerState{RightTrigger: 1}, g)
+	if !left || right {
+		t.Fatalf("RT should left click: left=%v right=%v", left, right)
+	}
+	left, right = desiredMouse(protocol.ControllerState{LeftTrigger: 1}, g)
+	if left || !right {
+		t.Fatalf("LT should right click: left=%v right=%v", left, right)
+	}
+}
+
+func TestGTADPadScrollMapping(t *testing.T) {
+	g := profile(t, "gta")
+	active := activeWheels(protocol.ControllerState{DPad: protocol.DPadUp}, g)
+	if active[wheelSrcDPadBase+0] != 1 {
+		t.Fatalf("d-pad up should turn the wheel up: %v", active)
+	}
+	if keys := desiredKeys(protocol.ControllerState{DPad: protocol.DPadUp}, g); len(keys) != 0 {
+		t.Fatalf("d-pad up must not press an arrow key in the gta profile: %v", keys)
+	}
+	// Left and right still send arrow keys.
+	keys := desiredKeys(protocol.ControllerState{DPad: protocol.DPadLeft}, g)
+	if !keys[macKeyLeft] {
+		t.Fatalf("d-pad left should still press the arrow key: %v", keys)
 	}
 }
 
@@ -148,33 +175,91 @@ func TestMouseDelta(t *testing.T) {
 	}
 }
 
-func TestGTADPadScrollMapping(t *testing.T) {
-	g := profile(t, "gta")
-	if !g.DPadScroll {
-		t.Fatal("gta profile should scroll with the d-pad")
+func TestParseProfileTemplate(t *testing.T) {
+	p, err := ParseProfile(TemplateMappingJSON())
+	if err != nil {
+		t.Fatalf("the generated template must parse: %v", err)
 	}
-	keys := desiredKeys(protocol.ControllerState{DPad: protocol.DPadUp}, g)
-	if keys[macKeyUp] {
-		t.Fatalf("d-pad up must not press an arrow key in the gta profile: %v", keys)
+	if !p.RightStickMouse {
+		t.Fatal("template should use mouse look")
 	}
-	// Left and right still send arrow keys.
-	keys = desiredKeys(protocol.ControllerState{DPad: protocol.DPadLeft}, g)
-	if !keys[macKeyLeft] {
-		t.Fatalf("d-pad left should still press the arrow key: %v", keys)
+	if keys := desiredKeys(protocol.ControllerState{Buttons: protocol.ButtonA}, p); !keys[macKeySpace] {
+		t.Fatalf("template A should be space: %v", keys)
+	}
+	if keys := desiredKeys(protocol.ControllerState{Buttons: protocol.ButtonX}, p); !keys[macKeyE] {
+		t.Fatalf("template X should be E: %v", keys)
+	}
+	if keys := desiredKeys(protocol.ControllerState{DPad: protocol.DPadUp}, p); !keys[macKeyUp] {
+		t.Fatalf("template d-pad up should be the arrow key: %v", keys)
+	}
+	left, _ := desiredMouse(protocol.ControllerState{LeftTrigger: 1}, p)
+	if !left {
+		t.Fatal("template LT should left click")
 	}
 }
 
-func TestTriggerClicks(t *testing.T) {
-	for name, want := range map[string][2]bool{
-		"general": {false, true}, // LT left click, RT right click
-		"gta":     {true, false}, // LT aims (right click), RT fires (left click)
-	} {
-		lt, rt := macKeyProfiles[name].triggerClicks()
-		if lt != want[0] || rt != want[1] {
-			t.Errorf("%s: LT right=%v RT right=%v, want %v", name, lt, rt, want)
+func TestParseProfileCustom(t *testing.T) {
+	p, err := ParseProfile([]byte(`{
+		"buttons": {"A": "x", "B": "mouseLeft"},
+		"dpad": {"up": "wheelUp"},
+		"leftStick": {"up": "i", "down": "k", "left": "j", "right": "l"},
+		"rightStick": {"left": "q", "right": "e"},
+		"leftTrigger": "wheelDown",
+		"rightTrigger": "space",
+		"stickThreshold": 0.5,
+		"mouseSpeedPxPerSecond": 500
+	}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if keys := desiredKeys(protocol.ControllerState{Buttons: protocol.ButtonA}, p); !keys[macKeyX] {
+		t.Fatalf("A should be X: %v", keys)
+	}
+	left, _ := desiredMouse(protocol.ControllerState{Buttons: protocol.ButtonB}, p)
+	if !left {
+		t.Fatal("B should left click")
+	}
+	if p.RightStickMouse {
+		t.Fatal("rightStick object should switch to key mode")
+	}
+	if keys := desiredKeys(protocol.ControllerState{RightX: 1}, p); !keys[macKeyE] {
+		t.Fatalf("right stick right should be E: %v", keys)
+	}
+	if keys := desiredKeys(protocol.ControllerState{RightTrigger: 1}, p); !keys[macKeySpace] {
+		t.Fatalf("RT should be space: %v", keys)
+	}
+	// Custom threshold: 0.4 is below it, 0.6 above.
+	if keys := desiredKeys(protocol.ControllerState{LeftX: 0.4}, p); len(keys) != 0 {
+		t.Fatalf("below the custom threshold nothing should press: %v", keys)
+	}
+	if keys := desiredKeys(protocol.ControllerState{LeftX: -0.6}, p); !keys[macKeyJ] {
+		t.Fatalf("above the custom threshold the stick should press: %v", keys)
+	}
+	active := activeWheels(protocol.ControllerState{LeftTrigger: 1}, p)
+	if active[wheelSrcLT] != -1 {
+		t.Fatalf("LT should turn the wheel down: %v", active)
+	}
+	if p.MouseSpeedPxPerSecond != 500 {
+		t.Fatalf("mouse speed override %v", p.MouseSpeedPxPerSecond)
+	}
+}
+
+func TestParseProfileErrors(t *testing.T) {
+	cases := map[string]string{
+		"unknown key":      `{"buttons": {"A": "banana"}}`,
+		"unknown button":   `{"buttons": {"Z": "a"}}`,
+		"unknown dir":      `{"dpad": {"diagonal": "a"}}`,
+		"bad rightStick":   `{"rightStick": "banana"}`,
+		"invalid json":     `{`,
+		"unknown trig key": `{"leftTrigger": "banana"}`,
+	}
+	for name, doc := range cases {
+		if _, err := ParseProfile([]byte(doc)); err == nil {
+			t.Fatalf("%s: expected an error", name)
 		}
 	}
-	if p := macKeyProfiles["racing"]; p.LTKey == keyNone || p.RTKey == keyNone {
-		t.Error("racing triggers must be keys (brake/throttle), not clicks")
+	if _, err := ParseProfile([]byte(`{"buttons": {"A": "banana"}}`)); err == nil ||
+		!strings.Contains(err.Error(), "banana") {
+		t.Fatalf("the error should name the offending value: %v", err)
 	}
 }

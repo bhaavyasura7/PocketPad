@@ -102,6 +102,24 @@ class Prefs(context: Context) {
         get() = sp.getBoolean(KEY_GAMING_LIGHTS, true)
         set(v) { sp.edit().putBoolean(KEY_GAMING_LIGHTS, v).apply() }
 
+    var lightsStyle: Int
+        get() = sp.getInt(KEY_LIGHTS_STYLE, 0).coerceIn(0, 1)
+        set(v) { sp.edit().putInt(KEY_LIGHTS_STYLE, v.coerceIn(0, 1)).apply() }
+
+    /** Percent: 50 slow, 100 normal, 200 fast. */
+    var lightsSpeed: Int
+        get() = sp.getInt(KEY_LIGHTS_SPEED, 100).let { if (it in LIGHT_SPEEDS) it else 100 }
+        set(v) { sp.edit().putInt(KEY_LIGHTS_SPEED, if (v in LIGHT_SPEEDS) v else 100).apply() }
+
+    /** Percent: 60 soft, 100 normal, 140 bright. */
+    var lightsBrightness: Int
+        get() = sp.getInt(KEY_LIGHTS_BRIGHTNESS, 100).let { if (it in LIGHT_BRIGHTNESS) it else 100 }
+        set(v) { sp.edit().putInt(KEY_LIGHTS_BRIGHTNESS, if (v in LIGHT_BRIGHTNESS) v else 100).apply() }
+
+    var lightsColor: Int
+        get() = sp.getInt(KEY_LIGHTS_COLOR, DEFAULT_LIGHT_COLOR)
+        set(v) { sp.edit().putInt(KEY_LIGHTS_COLOR, v).apply() }
+
     fun uiSettings() = UiSettings(
         deadZone = deadZonePercent / 100f,
         triggerAnalog = triggerAnalog,
@@ -110,6 +128,10 @@ class Prefs(context: Context) {
         layoutScale = layoutScalePercent / 100f,
         stickDoubleTap = stickDoubleTap,
         gamingLights = gamingLights,
+        lightsStyle = lightsStyle,
+        lightsSpeed = lightsSpeed / 100f,
+        lightsBrightness = lightsBrightness / 100f,
+        lightsColor = lightsColor,
     )
 
     fun resetSettings() {
@@ -117,11 +139,16 @@ class Prefs(context: Context) {
             .remove(KEY_DEAD_ZONE).remove(KEY_TRIGGER_ANALOG).remove(KEY_RATE)
             .remove(KEY_HAPTIC).remove(KEY_VIBRATE).remove(KEY_SCALE)
             .remove(KEY_LEFT_HANDED).remove(KEY_STICK_DOUBLE_TAP).remove(KEY_GAMING_LIGHTS)
+            .remove(KEY_LIGHTS_STYLE).remove(KEY_LIGHTS_SPEED).remove(KEY_LIGHTS_BRIGHTNESS)
+            .remove(KEY_LIGHTS_COLOR)
             .apply()
     }
 
     companion object {
         val RATES = intArrayOf(120, 166, 250)
+        val LIGHT_SPEEDS = intArrayOf(50, 100, 200)
+        val LIGHT_BRIGHTNESS = intArrayOf(60, 100, 140)
+        const val DEFAULT_LIGHT_COLOR = 0xFF22D3EE.toInt()
 
         private const val KEY_DEVICE_ID = "deviceId"
         private const val KEY_LAST_WIFI = "lastWifi"
@@ -135,6 +162,10 @@ class Prefs(context: Context) {
         private const val KEY_LEFT_HANDED = "leftHanded"
         private const val KEY_STICK_DOUBLE_TAP = "stickDoubleTap"
         private const val KEY_GAMING_LIGHTS = "gamingLights"
+        private const val KEY_LIGHTS_STYLE = "lightsStyle"
+        private const val KEY_LIGHTS_SPEED = "lightsSpeed"
+        private const val KEY_LIGHTS_BRIGHTNESS = "lightsBrightness"
+        private const val KEY_LIGHTS_COLOR = "lightsColor"
         private const val PREFIX_RECEIVER = "recv:"
 
         fun bytesToHex(b: ByteArray): String {

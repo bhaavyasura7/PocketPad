@@ -56,9 +56,13 @@ func runApp(args []string) error {
 	if err != nil {
 		return err
 	}
-	profileName, err := resolveProfile(f, *profile)
+	log := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo}))
+	profileName, mappingFile, err := resolveProfile(f, *profile)
 	if err != nil {
 		return err
+	}
+	if mappingFile != "" {
+		watchMappingFile(mappingFile, log)
 	}
 	secret, err := f.Secret()
 	if err != nil {
@@ -77,7 +81,6 @@ func runApp(args []string) error {
 	}
 	defer pad.Close()
 
-	log := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo}))
 	srv, err := session.New(session.Config{
 		Addr: *listen, PairKey: protocol.PairKey(secret), Name: *name,
 		Watchdog: *watchdog, SessionTimeout: *timeout, MaxRateHz: *rate, Logger: log,

@@ -8,12 +8,14 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"log/slog"
 	"net"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"syscall"
 	"time"
@@ -45,6 +47,8 @@ func main() {
 		err = runApp(args)
 	case "pair":
 		err = pair(args)
+	case "keys":
+		err = printKeys()
 	case "backends":
 		fmt.Println(strings.Join(gamepad.Names(), "\n"))
 	case "version":
@@ -69,6 +73,7 @@ Usage:
   pocketpad serve [flags]   receive input and drive a virtual gamepad (default)
   pocketpad app [flags]     macOS window with the pairing QR code (receiver included)
   pocketpad pair [-reset]   show the pairing code to enter on the phone
+  pocketpad keys            list every key name for custom mapping.json files
   pocketpad backends        list gamepad backends
   pocketpad version
 
@@ -86,26 +91,102 @@ func loadConfig(path string) (*config.File, error) {
 	return config.Load(path)
 }
 
-// resolveProfile picks the keyboard/mouse profile: the flag wins, then the
-// profile remembered in the config, then "general"; the choice is saved so a
-// plain double-click of the Mac app resumes it.
-func resolveProfile(f *config.File, flagValue string) (string, error) {
-	name := flagValue
+// resolveProfile picks the keyboard/mouse mapping: the flag wins, then the
+// selection remembered in the config, then "general". Built-in names select
+// a preset; "custom" (or a path to a .json file) loads a fully custom
+// mapping and creates a template when none exists yet. It returns the
+// display name and, for custom mappings, the file to watch for live reload.
+func resolveProfile(f *config.File, flagValue string) (name string, mappingPath string, err error) {
+	name = flagValue
 	if name == "" {
 		name = f.Profile
 	}
 	if name == "" {
 		name = "general"
 	}
+
+	if name == "custom" || strings.HasSuffix(strings.ToLower(name), ".json") {
+		path := name
+		if name == "custom" {
+			path = filepath.Join(filepath.Dir(f.Path()), "mapping.json")
+		}
+		p, loadErr := gamepad.LoadProfileFile(path)
+		if loadErr != nil {
+			if errors.Is(loadErr, os.ErrNotExist) {
+				if writeErr := os.WriteFile(path, gamepad.TemplateMappingJSON(), 0o600); writeErr == nil {
+					return "", "", fmt.Errorf(
+						"created a mapping template at %s — edit it and start again "+
+							"(\"pocketpad keys\" lists every key name)", path)
+				}
+			}
+			return "", "", loadErr
+		}
+		gamepad.SetCustomProfile(p)
+		if f.Profile != name {
+			if saveErr := f.SetProfile(name); saveErr != nil {
+				return "", "", saveErr
+			}
+		}
+		return "custom", path, nil
+	}
+
 	if err := gamepad.SetMacKeysProfile(name); err != nil {
-		return "", err
+		return "", "", err
 	}
 	if f.Profile != name {
 		if err := f.SetProfile(name); err != nil {
-			return "", err
+			return "", "", err
 		}
 	}
-	return name, nil
+	return name, "", nil
+}
+
+// watchMappingFile reloads a custom mapping while the receiver runs, so the
+// file can be tuned in-game: save it and the change applies within seconds.
+func watchMappingFile(path string, log *slog.Logger) {
+	go func() {
+		var last time.Time
+		if fi, err := os.Stat(path); err == nil {
+			last = fi.ModTime()
+		}
+		t := time.NewTicker(2 * time.Second)
+		defer t.Stop()
+		for range t.C {
+			fi, err := os.Stat(path)
+			if err != nil || !fi.ModTime().After(last) {
+				continue
+			}
+			last = fi.ModTime()
+			p, err := gamepad.LoadProfileFile(path)
+			if err != nil {
+				log.Warn("mapping reload failed; keeping the previous mapping", "file", path, "error", err)
+				continue
+			}
+			gamepad.SetCustomProfile(p)
+			log.Info("mapping reloaded", "file", path)
+		}
+	}()
+}
+
+// printKeys lists every key name accepted in mapping.json plus a full
+// example, so custom mappings never require guessing.
+func printKeys() error {
+	fmt.Println("Key names for mapping.json (case does not matter):")
+	names := gamepad.KeyNames()
+	for i := 0; i < len(names); i += 8 {
+		end := i + 8
+		if end > len(names) {
+			end = len(names)
+		}
+		fmt.Println("  " + strings.Join(names[i:end], "  "))
+	}
+	fmt.Println()
+	fmt.Println("Mouse actions:  mouseLeft  mouseRight  wheelUp  wheelDown  none")
+	fmt.Println()
+	fmt.Println("Example mapping.json (also created for you on the first \"-profile custom\"):")
+	fmt.Println()
+	_, err := os.Stdout.Write(gamepad.TemplateMappingJSON())
+	return err
 }
 
 func pair(args []string) error {
@@ -171,9 +252,12 @@ func serve(args []string) error {
 		*name, _ = os.Hostname()
 	}
 
-	profileName, err := resolveProfile(f, *profile)
+	profileName, mappingFile, err := resolveProfile(f, *profile)
 	if err != nil {
 		return err
+	}
+	if mappingFile != "" {
+		watchMappingFile(mappingFile, log)
 	}
 	pad, backendName, err := gamepad.ConnectBest(*backend)
 	if err != nil {
@@ -182,7 +266,11 @@ func serve(args []string) error {
 	defer pad.Close()
 	fmt.Fprintf(os.Stderr, "Gamepad backend: %s\n", backendName)
 	if backendName == "mackeys" {
-		fmt.Fprintf(os.Stderr, "Keyboard/mouse profile: %s\n", profileName)
+		if mappingFile != "" {
+			fmt.Fprintf(os.Stderr, "Keyboard/mouse mapping: custom, live reload from %s\n", mappingFile)
+		} else {
+			fmt.Fprintf(os.Stderr, "Keyboard/mouse profile: %s\n", profileName)
+		}
 	}
 	if !pad.Capabilities().OSVisible {
 		log.Warn("the mock backend is diagnostics only: games will not see a controller")
