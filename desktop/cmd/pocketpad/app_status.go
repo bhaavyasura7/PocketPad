@@ -31,7 +31,7 @@ func appStatusFor(s session.Snapshot, needsPermission bool) appStatus {
 	case needsPermission:
 		st.state = appPermission
 		st.title = "Permission needed"
-		st.detail = "Allow PocketPad under Accessibility in System Settings to control this Mac."
+		// The window shows an explanation with an Open Settings button.
 	case s.Connected:
 		st.state = appConnected
 		st.title = "Connected"

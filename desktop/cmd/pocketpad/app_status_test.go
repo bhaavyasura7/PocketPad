@@ -1,7 +1,6 @@
 package main
 
 import (
-	"strings"
 	"testing"
 	"time"
 
@@ -37,7 +36,7 @@ func TestAppStatus(t *testing.T) {
 	}
 
 	perm := appStatusFor(connected, true)
-	if perm.state != appPermission || !strings.Contains(perm.detail, "Accessibility") || perm.stats == "" {
+	if perm.state != appPermission || perm.title != "Permission needed" || perm.stats == "" {
 		t.Fatalf("permission: %+v", perm)
 	}
 

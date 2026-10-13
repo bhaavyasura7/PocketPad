@@ -140,9 +140,6 @@ static void PPEditorStatus(NSString *text);
 
 /** Reflects the active profile in the subtitle and both profile menus. */
 static void PPShowProfile(NSString *name) {
-	if (gKeyboardMode) {
-		gWindow.subtitle = [NSString stringWithFormat:@"%@ · %@ profile", gModeTitle, PPProfileTitle(name)];
-	}
 	if (gMainProfilePopup != nil) {
 		PPSelectValue(gMainProfilePopup, name);
 	}
@@ -280,6 +277,7 @@ static void PPApplyStatus(int state, NSString *t, NSString *d, NSString *s) {
 	gStatusDot.contentTintColor = (state == PPStateConnected) ? [NSColor systemGreenColor] : [NSColor systemOrangeColor];
 	gStatusTitle.stringValue = t;
 	gStatusDetail.stringValue = d;
+	gStatusDetail.hidden = (d.length == 0);
 	gStats.stringValue = s;
 	gStats.hidden = (s.length == 0);
 	gPermissionBanner.hidden = (state != PPStatePermission);
@@ -325,8 +323,7 @@ static void PPRunSnapshots(NSString *dir) {
 	PPApplyStatus(PPStateConnected, @"Connected to Pixel 8", @"4.1 ms latency · Phone battery 80%",
 	              @"250 updates/s · 0 lost · 0 late");
 	PPWriteBoth(gWindow, dir, @"2-connected");
-	PPApplyStatus(PPStatePermission, @"Permission needed",
-	              @"Allow PocketPad under Accessibility in System Settings to control this Mac.", @"");
+	PPApplyStatus(PPStatePermission, @"Permission needed", @"", @"");
 	PPWriteBoth(gWindow, dir, @"3-permission");
 	if (gKeyboardMode) {
 		pp_app_show_editor(ppGoCurrentMappingJSON());
@@ -345,7 +342,7 @@ static NSView *PPPermissionBanner(CGFloat width) {
 
 	NSImageView *icon = [NSImageView imageViewWithImage:[NSImage imageWithSystemSymbolName:@"exclamationmark.triangle.fill" accessibilityDescription:@"Warning"]];
 	icon.contentTintColor = [NSColor systemOrangeColor];
-	NSTextField *text = [NSTextField wrappingLabelWithString:@"PocketPad needs Accessibility permission to control this Mac."];
+	NSTextField *text = [NSTextField wrappingLabelWithString:@"Allow PocketPad under Accessibility in System Settings so it can control this Mac."];
 	text.font = [NSFont systemFontOfSize:12];
 	text.preferredMaxLayoutWidth = width - 180;
 	NSButton *open = [NSButton buttonWithTitle:@"Open Settings" target:gDelegate action:@selector(openAccessibilitySettings:)];
@@ -489,6 +486,7 @@ void pp_app_launch(const char *modeTitle, const char *code, const char *address,
 		NSView *content = gWindow.contentView;
 		[content addSubview:stack];
 		[NSLayoutConstraint activateConstraints:@[
+			[stack.widthAnchor constraintEqualToConstant:width + 60],
 			[stack.leadingAnchor constraintEqualToAnchor:content.leadingAnchor],
 			[stack.trailingAnchor constraintEqualToAnchor:content.trailingAnchor],
 			[stack.topAnchor constraintEqualToAnchor:content.topAnchor],
@@ -666,9 +664,17 @@ void pp_app_show_editor(const char *json) {
 			for (NSDictionary *section in sections) {
 				docHeight += headerH + [(NSArray *)section[@"rows"] count] * rowH + 12 + 16;
 			}
+			// The document follows the scroll view's width through constraints;
+			// its children use autoresizing relative to this initial width.
 			PPFlippedView *doc = [[PPFlippedView alloc] initWithFrame:NSMakeRect(0, 0, docWidth, docHeight)];
-			doc.autoresizingMask = NSViewWidthSizable;
 			scroll.documentView = doc;
+			doc.translatesAutoresizingMaskIntoConstraints = NO;
+			[NSLayoutConstraint activateConstraints:@[
+				[doc.leadingAnchor constraintEqualToAnchor:scroll.contentView.leadingAnchor],
+				[doc.trailingAnchor constraintEqualToAnchor:scroll.contentView.trailingAnchor],
+				[doc.topAnchor constraintEqualToAnchor:scroll.contentView.topAnchor],
+				[doc.heightAnchor constraintEqualToConstant:docHeight],
+			]];
 
 			gRowKeys = [NSMutableArray array];
 			gRowPopups = [NSMutableArray array];
