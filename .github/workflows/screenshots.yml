@@ -1,0 +1,54 @@
+name: Mac app screenshots
+
+# Renders the macOS window in each state, in light and dark appearance, and
+# publishes the images to the `screenshots` branch and as an artifact. The
+# app draws its own windows (POCKETPAD_SNAPSHOT_DIR), so no screen-recording
+# permission is needed.
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'desktop/cmd/pocketpad/**'
+
+permissions:
+  contents: write
+
+jobs:
+  screenshots:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: desktop/go.mod
+      - name: Build
+        working-directory: desktop
+        run: CGO_ENABLED=1 go build -o ../pocketpad ./cmd/pocketpad
+      - name: Render
+        env:
+          POCKETPAD_SNAPSHOT_DIR: ${{ github.workspace }}/shots
+          POCKETPAD_CONFIG: ${{ runner.temp }}/receiver.json
+        run: |
+          ./pocketpad app &
+          pid=$!
+          for i in $(seq 1 60); do
+            kill -0 "$pid" 2>/dev/null || break
+            sleep 1
+          done
+          kill "$pid" 2>/dev/null || true
+          ls -la shots
+          test -n "$(ls shots/*.png 2>/dev/null)"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mac-app-screenshots
+          path: shots/*.png
+      - name: Publish to the screenshots branch
+        run: |
+          cd shots
+          git init -q -b screenshots
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add *.png
+          git commit -q -m "Mac app screenshots for ${GITHUB_SHA::7}"
+          git push -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" screenshots

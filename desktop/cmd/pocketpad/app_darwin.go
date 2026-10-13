@@ -171,7 +171,12 @@ func runApp(args []string) error {
 
 	// Live status, refreshed twice a second.
 	keyboardMode := backendName == "mackeys"
+	// Snapshot mode (POCKETPAD_SNAPSHOT_DIR, used by CI) sets its own states.
+	snapshot := os.Getenv("POCKETPAD_SNAPSHOT_DIR") != ""
 	go func() {
+		if snapshot {
+			return
+		}
 		t := time.NewTicker(500 * time.Millisecond)
 		defer t.Stop()
 		for range t.C {

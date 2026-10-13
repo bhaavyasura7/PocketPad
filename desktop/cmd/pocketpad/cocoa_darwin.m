@@ -272,26 +272,67 @@ static void PPInstallMenu(void) {
 
 // --- status ----------------------------------------------------------------
 
+// Applies a status on the main thread.
+static void PPApplyStatus(int state, NSString *t, NSString *d, NSString *s) {
+	if (gStatusTitle == nil) {
+		return;
+	}
+	gStatusDot.contentTintColor = (state == PPStateConnected) ? [NSColor systemGreenColor] : [NSColor systemOrangeColor];
+	gStatusTitle.stringValue = t;
+	gStatusDetail.stringValue = d;
+	gStats.stringValue = s;
+	gStats.hidden = (s.length == 0);
+	gPermissionBanner.hidden = (state != PPStatePermission);
+}
+
 // Updates the status area from any thread.
 void pp_app_set_status(int state, const char *title, const char *detail, const char *stats) {
 	NSString *t = [NSString stringWithUTF8String:(title ? title : "")];
 	NSString *d = [NSString stringWithUTF8String:(detail ? detail : "")];
 	NSString *s = [NSString stringWithUTF8String:(stats ? stats : "")];
 	dispatch_async(dispatch_get_main_queue(), ^{
-		if (gStatusTitle == nil) {
-			return;
-		}
-		NSColor *color = [NSColor systemOrangeColor];
-		if (state == PPStateConnected) {
-			color = [NSColor systemGreenColor];
-		}
-		gStatusDot.contentTintColor = color;
-		gStatusTitle.stringValue = t;
-		gStatusDetail.stringValue = d;
-		gStats.stringValue = s;
-		gStats.hidden = (s.length == 0);
-		gPermissionBanner.hidden = (state != PPStatePermission);
+		PPApplyStatus(state, t, d, s);
 	});
+}
+
+// --- snapshots ---------------------------------------------------------------
+
+// With POCKETPAD_SNAPSHOT_DIR set, the app renders its windows to PNG files
+// in light and dark appearance and quits. Used by CI to show the UI.
+
+static void PPWriteSnapshot(NSWindow *window, NSString *dir, NSString *name, NSString *appearance) {
+	window.appearance = [NSAppearance appearanceNamed:appearance];
+	NSView *view = window.contentView.superview ?: window.contentView; // include the title bar
+	[window.contentView layoutSubtreeIfNeeded];
+	[view setNeedsDisplay:YES];
+	[window displayIfNeeded];
+	NSBitmapImageRep *rep = [view bitmapImageRepForCachingDisplayInRect:view.bounds];
+	[view cacheDisplayInRect:view.bounds toBitmapImageRep:rep];
+	NSData *png = [rep representationUsingType:NSBitmapImageFileTypePNG properties:@{}];
+	NSString *suffix = [appearance isEqualToString:NSAppearanceNameDarkAqua] ? @"dark" : @"light";
+	[png writeToFile:[dir stringByAppendingPathComponent:[NSString stringWithFormat:@"%@-%@.png", name, suffix]] atomically:YES];
+}
+
+static void PPWriteBoth(NSWindow *window, NSString *dir, NSString *name) {
+	PPWriteSnapshot(window, dir, name, NSAppearanceNameAqua);
+	PPWriteSnapshot(window, dir, name, NSAppearanceNameDarkAqua);
+}
+
+static void PPRunSnapshots(NSString *dir) {
+	[[NSFileManager defaultManager] createDirectoryAtPath:dir withIntermediateDirectories:YES attributes:nil error:NULL];
+	PPApplyStatus(PPStateWaiting, @"Waiting for your phone", @"Open PocketPad on your phone, on the same Wi-Fi network.", @"");
+	PPWriteBoth(gWindow, dir, @"1-waiting");
+	PPApplyStatus(PPStateConnected, @"Connected to Pixel 8", @"4.1 ms latency · Phone battery 80%",
+	              @"250 updates/s · 0 lost · 0 late");
+	PPWriteBoth(gWindow, dir, @"2-connected");
+	PPApplyStatus(PPStatePermission, @"Permission needed",
+	              @"Allow PocketPad under Accessibility in System Settings to control this Mac.", @"");
+	PPWriteBoth(gWindow, dir, @"3-permission");
+	if (gKeyboardMode) {
+		pp_app_show_editor(ppGoCurrentMappingJSON());
+		PPWriteBoth(gEditorWindow, dir, @"4-editor");
+	}
+	[NSApp terminate:nil];
 }
 
 // --- main window -----------------------------------------------------------
@@ -462,6 +503,13 @@ void pp_app_launch(const char *modeTitle, const char *code, const char *address,
 		}
 		[gWindow makeKeyAndOrderFront:nil];
 		[app activateIgnoringOtherApps:YES];
+		const char *snapshotDir = getenv("POCKETPAD_SNAPSHOT_DIR");
+		if (snapshotDir != NULL && snapshotDir[0] != 0) {
+			NSString *dir = [NSString stringWithUTF8String:snapshotDir];
+			dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+				PPRunSnapshots(dir);
+			});
+		}
 		[app run];
 	}
 }
