@@ -22,12 +22,14 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 	"unsafe"
 
 	qrcode "github.com/skip2/go-qrcode"
 
+	"github.com/bhaavyasura7/pocketpad/desktop/internal/config"
 	"github.com/bhaavyasura7/pocketpad/desktop/internal/diag"
 	"github.com/bhaavyasura7/pocketpad/desktop/internal/gamepad"
 	"github.com/bhaavyasura7/pocketpad/desktop/internal/protocol"
@@ -36,6 +38,59 @@ import (
 
 //go:embed pocketpad_logo.png
 var pocketpadLogo []byte
+
+// Set while runApp is active; the mapping editor callbacks use them.
+var (
+	appConfig      *config.File
+	appMappingPath string // where the editor saves custom mappings
+)
+
+// saveMappingFromJSON validates an editor document, writes it to the custom
+// mapping file and activates it immediately.
+func saveMappingFromJSON(doc string) error {
+	p, err := gamepad.ParseProfile([]byte(doc))
+	if err != nil {
+		return err
+	}
+	if err := os.WriteFile(appMappingPath, []byte(doc), 0o600); err != nil {
+		return err
+	}
+	gamepad.SetCustomProfile(p)
+	if appConfig != nil {
+		_ = appConfig.SetProfile("custom")
+	}
+	return nil
+}
+
+//export ppGoCurrentMappingJSON
+func ppGoCurrentMappingJSON() *C.char {
+	return C.CString(string(gamepad.CurrentMappingJSON()))
+}
+
+//export ppGoSaveMapping
+func ppGoSaveMapping(doc *C.char) *C.char {
+	if err := saveMappingFromJSON(C.GoString(doc)); err != nil {
+		return C.CString(err.Error())
+	}
+	return nil
+}
+
+//export ppGoSetProfile
+func ppGoSetProfile(name *C.char) *C.char {
+	n := C.GoString(name)
+	if err := gamepad.SetMacKeysProfile(n); err != nil {
+		return C.CString(err.Error())
+	}
+	if appConfig != nil {
+		_ = appConfig.SetProfile(n)
+	}
+	return nil
+}
+
+//export ppGoCurrentProfileName
+func ppGoCurrentProfileName() *C.char {
+	return C.CString(gamepad.SelectedProfileName())
+}
 
 // runApp is `pocketpad app`: the native macOS window with the pairing QR
 // code, the pairing code itself, the LAN address and live status, with the
@@ -60,6 +115,12 @@ func runApp(args []string) error {
 	profileName, mappingFile, err := resolveProfile(f, *profile)
 	if err != nil {
 		return err
+	}
+	appConfig = f
+	if mappingFile != "" {
+		appMappingPath = mappingFile
+	} else {
+		appMappingPath = filepath.Join(filepath.Dir(f.Path()), "mapping.json")
 	}
 	if mappingFile != "" {
 		watchMappingFile(mappingFile, log)

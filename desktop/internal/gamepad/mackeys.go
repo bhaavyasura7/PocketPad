@@ -298,6 +298,14 @@ func currentProfile() MacKeyProfile {
 	return macKeyProfiles[selectedProfile]
 }
 
+// SelectedProfileName is the active profile ("general", "racing", "gta" or
+// "custom").
+func SelectedProfileName() string {
+	profileMu.RLock()
+	defer profileMu.RUnlock()
+	return selectedProfile
+}
+
 func stickThreshold(p MacKeyProfile) float32 {
 	if p.StickThreshold <= 0 {
 		return stickKeyThresholdDefault
@@ -792,6 +800,17 @@ func toFileProfile(p MacKeyProfile) fileProfile {
 // general mapping, fully spelled out, ready to edit.
 func TemplateMappingJSON() []byte {
 	fp := toFileProfile(macKeyProfiles["general"])
+	b, err := json.MarshalIndent(fp, "", "  ")
+	if err != nil {
+		return []byte("{}")
+	}
+	return append(b, '\n')
+}
+
+// CurrentMappingJSON exposes the currently selected mapping in fileProfile
+// shape, for the Mac app's mapping editor.
+func CurrentMappingJSON() []byte {
+	fp := toFileProfile(currentProfile())
 	b, err := json.MarshalIndent(fp, "", "  ")
 	if err != nil {
 		return []byte("{}")

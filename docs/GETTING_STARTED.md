@@ -256,9 +256,17 @@ slowly for aiming and map waypoints, a full push moves fast.
 Because keys are either pressed or not, steering and throttle are on or off
 in this mode. For analog control, use Bluetooth mode or a Windows computer.
 
-### Fully custom mappings (any key, live reload)
+### Fully custom mappings (any key, save-to-apply)
 
-Anything can be remapped without touching code:
+The easy way — everything in the app, no files: **open the Mac app and click
+“Mappings…”**. Pick the profile at the top (general, racing, gta or custom),
+change any control with its dropdown — buttons, d-pad, both sticks, triggers
+can all be any key, a mouse click or a wheel turn — and press **Save & use**.
+The change is active instantly, is remembered, and never requires restarting
+anything. “Revert” re-reads the active mapping; switching the profile
+dropdown applies built-in presets live.
+
+Power users can also drive the same engine from a file:
 
 ```sh
 ./pocketpad serve -profile custom
