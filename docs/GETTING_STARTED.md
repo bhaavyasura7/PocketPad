@@ -21,7 +21,7 @@ phone as the controller.
 - An Android phone running Android 9 or later.
 - A Windows or macOS computer on the **same Wi-Fi network** as the phone.
 - Only to build from source: [Go](https://go.dev/dl/) 1.24 or later for
-  the receiver, and JDK 17 with the Android SDK (platform 35) for the app.
+  the receiver, and JDK 17 with the Android SDK (platform 36) for the app.
   Ready-made builds are on the Releases page.
 
 ## Set up the computer

@@ -80,6 +80,7 @@
     <string name="setting_stick_double_tap_summary">Off: use the separate L3 / R3 buttons.</string>
     <string name="done">Done</string>
     <string name="reset_settings">Reset to defaults</string>
+    <string name="privacy_options">Privacy options</string>
 
     <!-- Controls reference -->
     <string name="controls_title">Controls</string>
